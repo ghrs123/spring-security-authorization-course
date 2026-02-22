@@ -9,7 +9,7 @@ import {
   BookOpen, Code2, ChevronDown, ChevronUp, AlertTriangle,
   ExternalLink, Copy, Check, Terminal, FileText, Brain,
   Dumbbell, ChevronRight, Eye, EyeOff, Trophy, XCircle, CheckCircle2,
-  Target,
+  Target, Lightbulb,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { Highlight, themes } from "prism-react-renderer";
@@ -126,6 +126,33 @@ function OutcomesSection({ outcomes, accentColor }: { outcomes: string[]; accent
           );
         })}
       </ol>
+    </div>
+  );
+}
+
+function WhenToUseSection({ items, accentColor }: { items: string[]; accentColor: string }) {
+  const getItemStyle = (item: string) => {
+    if (item.startsWith("✅")) return "border-green-500/20 bg-green-500/5 text-green-400/80";
+    if (item.startsWith("❌")) return "border-red-500/20 bg-red-500/5 text-red-400/80";
+    if (item.startsWith("⚖")) return "border-amber-500/20 bg-amber-500/5 text-amber-400/80";
+    return "border-border/20 bg-muted/5 text-muted-foreground";
+  };
+
+  return (
+    <div className="px-6 py-6 border-t border-border/20">
+      <div className="flex items-center gap-2 mb-5">
+        <Lightbulb size={14} className={accentColor === "emerald" ? "text-primary" : "text-accent"} />
+        <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Quando Usar Esta Técnica
+        </h4>
+      </div>
+      <ul className="space-y-2.5">
+        {items.map((item, i) => (
+          <li key={i} className={`px-3 py-2.5 rounded-lg border text-sm leading-relaxed ${getItemStyle(item)}`}>
+            {item}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -409,6 +436,7 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
   const hasQuiz = topic.quiz && topic.quiz.length > 0;
   const hasExercises = topic.exercises && topic.exercises.length > 0;
   const hasOutcomes = topic.outcomes && topic.outcomes.length > 0;
+  const hasWhenToUse = topic.whenToUse && topic.whenToUse.length > 0;
 
   return (
     <div
@@ -441,8 +469,13 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
             </div>
 
             {/* Feature badges */}
-            {(hasQuiz || hasExercises || hasOutcomes) && (
+            {(hasQuiz || hasExercises || hasOutcomes || hasWhenToUse) && (
               <div className="flex items-center gap-3 mb-4">
+                {hasWhenToUse && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
+                    <Lightbulb size={9} /> guia de uso
+                  </span>
+                )}
                 {hasOutcomes && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
                     <Target size={9} /> {topic.outcomes!.length} objetivos
@@ -497,6 +530,11 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
           {/* Outcomes */}
           {hasOutcomes && (
             <OutcomesSection outcomes={topic.outcomes!} accentColor={accentColor} />
+          )}
+
+          {/* When To Use */}
+          {hasWhenToUse && (
+            <WhenToUseSection items={topic.whenToUse!} accentColor={accentColor} />
           )}
 
           {/* Code Examples */}

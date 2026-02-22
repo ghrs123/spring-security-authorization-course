@@ -401,6 +401,14 @@ public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
 // mantenha o CSRF habilitado!`,
             solutionLanguage: "java"
           }
+        ],
+        whenToUse: [
+          "✅ USE when different URL namespaces need genuinely different authentication mechanisms — e.g., JWT for /api/** and form login for /admin/**.",
+          "✅ USE when session management policies differ between entry points — stateless for the REST API, stateful for the MVC admin panel.",
+          "✅ USE when an actuator or metrics endpoint needs a separate security model from the main application.",
+          "❌ AVOID when you only need different authorization rules for different URLs — a single SecurityFilterChain with multiple .requestMatchers() handles this without the overhead.",
+          "❌ AVOID when the split adds configuration duplication without a real difference in auth mechanism or session strategy.",
+          "⚖ TRADE-OFF: Each chain is independent — shared configuration (CORS, headers, exception handling) must be duplicated or extracted to a shared method. @Order mistakes silently apply the wrong chain to requests."
         ]
       },
       {
@@ -928,6 +936,15 @@ public class DocumentService {
 // Se não aparecer, o interceptor não está sendo acionado.`,
             solutionLanguage: "java"
           }
+        ],
+        whenToUse: [
+          "✅ USE when authorization rules are tightly coupled to business method semantics — e.g., only the document owner can call updateDocument(), regardless of which HTTP endpoint triggered it.",
+          "✅ USE when the same service method is called from multiple controllers or scheduled tasks and must be secured at the service layer.",
+          "✅ USE when you need per-parameter security: @PreAuthorize(\"#userId == authentication.principal.id\") is not expressible at the HTTP layer.",
+          "❌ AVOID when the same rule applies uniformly to all methods under a URL pattern — use .requestMatchers(\"/api/admin/**\").hasRole(\"ADMIN\") in SecurityFilterChain instead. It is simpler, centralized, and visible to HTTP monitoring.",
+          "❌ AVOID when the annotated method is called from within the same bean (self-invocation) — AOP proxy is bypassed and @PreAuthorize is silently ignored.",
+          "❌ AVOID on methods called in tight inner loops — SpEL evaluation adds overhead per invocation.",
+          "⚖ TRADE-OFF: Security rules are decentralized across the codebase. Auditing all access rules requires reading every @Service, not just the SecurityFilterChain. HTTP-level tools (API gateways, reverse proxies) cannot see method-level rules."
         ]
       },
       {
@@ -1113,6 +1130,15 @@ public class CustomUserDetails implements UserDetails {
 @PreAuthorize("@documentPolicy.canAccess(authentication, #dto)")`,
             solutionLanguage: "java"
           }
+        ],
+        whenToUse: [
+          "✅ USE for concise runtime checks against method parameters: #resourceId == authentication.principal.ownedResourceId is clear and readable inline.",
+          "✅ USE @beanName.method(authentication, #param) to delegate to a Spring bean when the logic is complex but you still want it declared at the annotation site.",
+          "✅ USE for boolean combinations of standard checks: hasRole('ADMIN') or #id == authentication.principal.id.",
+          "❌ AVOID when the expression exceeds one logical clause — extract to a @Component policy bean. Long SpEL strings are unreadable and untestable.",
+          "❌ AVOID when the logic requires service calls to multiple beans, conditional branching, or exception handling — Java is the right tool, not SpEL.",
+          "❌ AVOID deep object graph navigation (authentication.principal.department.region.code) — it creates tight coupling to the principal's data model and is fragile to nulls.",
+          "⚖ TRADE-OFF: SpEL expressions cannot be unit tested in isolation. Errors surface at runtime (ELException), not at compile time. Complex expressions create implicit contracts between the security rule and the principal object's shape."
         ]
       },
       {
@@ -1888,6 +1914,15 @@ public SecurityFilterChain filterChain(HttpSecurity http,
 // Útil para: "ADMIN OU proprietário do recurso"`,
             solutionLanguage: "java"
           }
+        ],
+        whenToUse: [
+          "✅ USE when authorization logic cannot be expressed in SpEL or URL patterns — e.g., IP allowlist/CIDR range checks, time-of-day restrictions, external policy engine (OPA/Cedar) integration.",
+          "✅ USE when you need to compose independent authorization rules cleanly: AuthorizationManagers.allOf() and anyOf() are more readable than a single monolithic SpEL expression.",
+          "✅ USE when replacing deprecated AccessDecisionManager or AccessDecisionVoter in a Spring Security 5 → 6 migration.",
+          "✅ USE when the authorization logic must be independently unit tested as a plain Java class without Spring context.",
+          "❌ AVOID when hasRole(), hasAuthority(), or a simple @beanName.method() SpEL expression covers the requirement — a custom AuthorizationManager is unnecessary complexity for standard cases.",
+          "❌ AVOID for domain-object (per-instance) security — use PermissionEvaluator with hasPermission() in @PreAuthorize instead, which integrates with Spring Security's method security pipeline.",
+          "⚖ TRADE-OFF: More boilerplate than SpEL (a full Java class vs one annotation), but offers full testability, dependency injection, logging, and the ability to call external systems synchronously during the authorization decision."
         ]
       },
       {
