@@ -36,6 +36,13 @@ export interface CodeExample {
   explanation: string;
 }
 
+export interface TopicDiagram {
+  title: string;
+  type: "mermaid";
+  code: string;
+  explanation?: string;
+}
+
 export interface Topic {
   id: string;
   title: string;
@@ -50,6 +57,7 @@ export interface Topic {
   outcomes?: string[];
   whenToUse?: string[];
   antiPatterns?: AntiPattern[];
+  diagrams?: TopicDiagram[];
 }
 
 export interface Level {
@@ -167,6 +175,19 @@ public class SecurityConfig {
         references: [
           { title: "Documentação Oficial do Spring Security", url: "https://docs.spring.io/spring-security/reference/" },
           { title: "Baeldung: Introduction to Java Config for Spring Security", url: "https://www.baeldung.com/java-config-spring-security" }
+        ],
+        diagrams: [
+          {
+            title: "Fluxo da cadeia de filtros de segurança (Servlet)",
+            type: "mermaid",
+            code: `flowchart LR
+  Request[HTTP Request] --> DelegatingFilterProxy
+  DelegatingFilterProxy --> FilterChainProxy
+  FilterChainProxy --> SecurityFilterChain[SecurityFilterChain]
+  SecurityFilterChain --> Filters[Filtros de Segurança]
+  Filters --> Servlet[Servlet / Controller]`,
+            explanation: "O container de servlet delega ao DelegatingFilterProxy; o FilterChainProxy escolhe a SecurityFilterChain pelo URL; a requisição percorre os filtros de segurança até ao controller."
+          }
         ],
         exercises: [
           {
@@ -1616,6 +1637,19 @@ public class AuthorizationConfig {
           { title: "Spring Security - SecurityContext", url: "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html#servlet-authentication-securitycontext" },
           { title: "Baeldung - SecurityContext and SecurityContextHolder", url: "https://www.baeldung.com/spring-security-context-propagation" }
         ],
+        diagrams: [
+          {
+            title: "Ciclo de vida do SecurityContext",
+            type: "mermaid",
+            code: `flowchart LR
+  A[Requisição chega] --> B[SecurityContextPersistenceFilter]
+  B --> C[Carrega SecurityContext da sessão]
+  C --> D[SecurityContextHolder.setContext]
+  D --> E[Filtros / Controller]
+  E --> F[Limpa ou persiste contexto]`,
+            explanation: "O SecurityContextPersistenceFilter carrega o contexto da sessão HTTP no início do request e define-o no SecurityContextHolder; no fim, o contexto é limpo ou guardado na sessão."
+          }
+        ],
         exercises: [
           {
             title: "SecurityContext em threads assíncronas — contexto perdido",
@@ -2188,6 +2222,19 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
             solutionLanguage: "java"
           }
         ],
+        diagrams: [
+          {
+            title: "Fluxo de decisão de autorização (AuthorizationFilter / AuthorizationManager)",
+            type: "mermaid",
+            code: `flowchart LR
+  Req[Requisição] --> AuthFilter[AuthorizationFilter]
+  AuthFilter --> AuthMgr[AuthorizationManager]
+  AuthMgr --> Check{Permitido?}
+  Check -->|Sim| Allow[Acesso permitido]
+  Check -->|Não| Deny[AccessDeniedException]`,
+            explanation: "O AuthorizationFilter obtém o Authentication do SecurityContextHolder, delega ao AuthorizationManager (regras de authorizeHttpRequests); se negado, lança AccessDeniedException e o ExceptionTranslationFilter trata (401/403)."
+          }
+        ],
         antiPatterns: [
           {
             title: "Using authenticated() instead of denyAll() as fallback",
@@ -2317,6 +2364,21 @@ public class ConfidentialDataService {
     }
 }`,
             explanation: "Chamadas internas (self-invocation) não passam pelo proxy AOP, portanto as anotações de segurança são ignoradas. A solução é extrair o método para outro bean, garantindo que a chamada passe pelo proxy."
+          }
+        ],
+        diagrams: [
+          {
+            title: "Invocação de segurança a nível de método (proxy AOP → interceptor → decisão)",
+            type: "mermaid",
+            code: `flowchart LR
+  Client[Chamador] --> Proxy[Proxy AOP]
+  Proxy --> PreAuth[PreAuthorize Interceptor]
+  PreAuth --> Decision{Autorizado?}
+  Decision -->|Não| Deny[AccessDeniedException]
+  Decision -->|Sim| Method[Método executado]
+  Method --> PostAuth[PostAuthorize / PostFilter]
+  PostAuth --> Response[Resposta]`,
+            explanation: "O proxy AOP intercepta a chamada; o interceptor de @PreAuthorize avalia a SpEL antes do método; se autorizado, o método executa e depois @PostAuthorize/@PostFilter aplicam-se ao resultado."
           }
         ],
         warnings: [

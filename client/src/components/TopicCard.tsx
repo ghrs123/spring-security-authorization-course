@@ -4,15 +4,16 @@
  *            references, interactive QUIZ, and practical EXERCISES
  */
 
-import type { Topic, CodeExample, QuizQuestion, Exercise, AntiPattern } from "@/lib/courseData";
+import type { Topic, CodeExample, QuizQuestion, Exercise, AntiPattern, TopicDiagram } from "@/lib/courseData";
 import {
   BookOpen, Code2, ChevronDown, ChevronUp, AlertTriangle,
   ExternalLink, Copy, Check, Terminal, FileText, Brain,
   Dumbbell, ChevronRight, Eye, EyeOff, Trophy, XCircle, CheckCircle2,
-  Target, Lightbulb, ShieldX,
+  Target, Lightbulb, ShieldX, GitBranch,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Highlight, themes } from "prism-react-renderer";
+import mermaid from "mermaid";
 
 interface TopicCardProps {
   topic: Topic;
@@ -85,6 +86,44 @@ function CodeBlock({ example, accentColor }: { example: CodeExample; accentColor
               Explicação:{" "}
             </span>
             {example.explanation}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MermaidDiagramBlock({ diagram, diagramId, accentColor }: { diagram: TopicDiagram; diagramId: string; accentColor: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || diagram.type !== "mermaid") return;
+    let cancelled = false;
+    mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "dark" });
+    mermaid.render(diagramId, diagram.code)
+      .then(({ svg }) => {
+        if (!cancelled && containerRef.current) containerRef.current.innerHTML = svg;
+      })
+      .catch(() => {
+        if (!cancelled && containerRef.current) containerRef.current.innerHTML = "<p class=\"text-sm text-muted-foreground\">Diagrama não disponível.</p>";
+      });
+    return () => { cancelled = true; };
+  }, [diagramId, diagram.code, diagram.type]);
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-border/30 bg-[#0d1117]">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-[#161b22] border-b border-border/20">
+        <GitBranch size={12} className={accentColor === "emerald" ? "text-primary/70" : "text-accent/70"} />
+        <span className="font-mono text-xs text-muted-foreground">{diagram.title}</span>
+      </div>
+      <div ref={containerRef} className="p-4 flex justify-center [&>svg]:max-w-full [&>svg]:h-auto" />
+      {diagram.explanation && (
+        <div className="px-4 py-3 bg-[#161b22] border-t border-border/20">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className={`font-semibold ${accentColor === "emerald" ? "text-primary/80" : "text-accent/80"}`}>
+              Explicação:{" "}
+            </span>
+            {diagram.explanation}
           </p>
         </div>
       )}
@@ -594,6 +633,28 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
               <div className="space-y-4">
                 {topic.codeExamples.map((example, i) => (
                   <CodeBlock key={i} example={example} accentColor={accentColor} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Diagrams */}
+          {topic.diagrams && topic.diagrams.length > 0 && (
+            <div className="px-6 py-6 border-t border-border/20">
+              <div className="flex items-center gap-2 mb-4">
+                <GitBranch size={14} className={accentColor === "emerald" ? "text-primary" : "text-accent"} />
+                <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Diagramas ({topic.diagrams.length})
+                </h4>
+              </div>
+              <div className="space-y-4">
+                {topic.diagrams.map((diagram, i) => (
+                  <MermaidDiagramBlock
+                    key={i}
+                    diagram={diagram}
+                    diagramId={`mermaid-${topic.id}-${i}`}
+                    accentColor={accentColor}
+                  />
                 ))}
               </div>
             </div>
