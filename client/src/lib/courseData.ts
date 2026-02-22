@@ -41,6 +41,7 @@ export interface Topic {
   quiz?: QuizQuestion[];
   exercises?: Exercise[];
   outcomes?: string[];
+  whenToUse?: string[];
 }
 
 export interface Level {
@@ -158,6 +159,80 @@ public class SecurityConfig {
         references: [
           { title: "Documentação Oficial do Spring Security", url: "https://docs.spring.io/spring-security/reference/" },
           { title: "Baeldung: Introduction to Java Config for Spring Security", url: "https://www.baeldung.com/java-config-spring-security" }
+        ],
+        exercises: [
+          {
+            title: "Endpoint sem proteção",
+            difficulty: "iniciante",
+            description: `Sua aplicação Spring Boot tem um endpoint GET /api/health. Após adicionar spring-boot-starter-security, todas as requisições retornam 401. Um colega sugere desabilitar o Spring Security por completo.
+
+Qual é a abordagem CORRETA para tornar /api/health publicamente acessível sem desabilitar a segurança? Implemente a SecurityFilterChain correta.`,
+            hint: "Use .requestMatchers(\"/api/health\").permitAll() antes de .anyRequest().authenticated().",
+            solution: `@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authz -> authz
+                // Permitir acesso público ao health endpoint
+                .requestMatchers("/api/health").permitAll()
+                // Todos os outros endpoints requerem autenticação
+                .anyRequest().authenticated()
+            )
+            .httpBasic(Customizer.withDefaults());
+        return http.build();
+    }
+}
+
+// NUNCA desabilite o Spring Security por completo em produção.
+// Exponha apenas o mínimo necessário via .permitAll().`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Diagnóstico de startup — senha gerada automaticamente",
+            difficulty: "intermediário",
+            description: `Ao iniciar a aplicação você vê no console:
+"Using generated security password: 8b3f2a..."
+
+1. Por que isso acontece?
+2. Como substituir por um utilizador fixo para desenvolvimento?
+3. Que risco de segurança isso representa em produção?
+
+Implemente a solução correta.`,
+            hint: "A senha automática é gerada quando NÃO existe nenhum bean UserDetailsService definido. Defina um para suprimi-la.",
+            solution: `// A mensagem aparece quando NENHUM bean UserDetailsService está definido.
+// Spring Boot auto-configura um utilizador 'user' com senha aleatória.
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    // Ao definir este bean, a geração automática é suprimida
+    @Bean
+    public UserDetailsService userDetailsService(PasswordEncoder encoder) {
+        UserDetails devUser = User.builder()
+            .username("dev")
+            .password(encoder.encode("devpassword"))
+            .roles("USER")
+            .build();
+        return new InMemoryUserDetailsManager(devUser);
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+
+// RISCO em produção:
+// Se a senha automática for exposta em logs, qualquer pessoa com
+// acesso aos logs obtém credenciais válidas.
+// NUNCA use InMemoryUserDetailsManager em produção —
+// implemente UserDetailsService com base de dados real.`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -244,6 +319,88 @@ public class MultiChainSecurityConfig {
           { title: "Spring Security Documentation - Architecture", url: "https://docs.spring.io/spring-security/reference/servlet/architecture.html" },
           { title: "Marco Behler's Guide to Spring Security", url: "https://www.marcobehler.com/guides/spring-security" },
           { title: "Baeldung - Spring Security", url: "https://www.baeldung.com/spring-security-tutorial" }
+        ],
+        exercises: [
+          {
+            title: "Múltiplas cadeias de filtros independentes",
+            difficulty: "intermediário",
+            description: `Sua aplicação tem dois conjuntos de endpoints:
+- /api/** — REST stateless, sem necessidade de CSRF
+- /admin/** — MVC stateful com formulário de login, CSRF necessário
+
+Configure duas SecurityFilterChain independentes que se apliquem a cada conjunto sem interferência.`,
+            hint: "Use .securityMatcher() para limitar o escopo de cada cadeia e @Order para definir prioridade. A cadeia mais específica deve ter @Order menor.",
+            solution: `@Configuration
+@EnableWebSecurity
+public class MultiChainSecurityConfig {
+
+    // Cadeia 1: API REST — stateless, sem CSRF
+    @Bean
+    @Order(1)
+    public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/api/**")
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(authz -> authz
+                .anyRequest().authenticated()
+            )
+            .httpBasic(Customizer.withDefaults());
+        return http.build();
+    }
+
+    // Cadeia 2: Admin MVC — stateful, CSRF habilitado por padrão
+    @Bean
+    @Order(2)
+    public SecurityFilterChain adminFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/admin/**")
+            .authorizeHttpRequests(authz -> authz
+                .anyRequest().hasRole("ADMIN")
+            )
+            .formLogin(Customizer.withDefaults());
+            // CSRF habilitado por padrão — não desabilitar!
+        return http.build();
+    }
+}`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "CSRF e API REST — diagnóstico do 403",
+            difficulty: "intermediário",
+            description: `Um POST para sua API REST retorna 403 mesmo com credenciais corretas e sem token CSRF no pedido.
+
+1. Explique por que isso acontece por padrão no Spring Security.
+2. Por que é seguro desabilitar o CSRF para APIs REST com JWT?
+3. Implemente a correção correta.`,
+            hint: "Spring Security habilita CSRF por padrão. Desabilite apenas para endpoints stateless que usam JWT no header Authorization.",
+            solution: `// PROBLEMA: Spring Security habilita CSRF por padrão.
+// APIs REST stateless não enviam tokens CSRF → 403 Forbidden.
+
+@Bean
+public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+    http
+        // SOLUÇÃO: Desabilitar CSRF para APIs stateless
+        .csrf(csrf -> csrf.disable())
+        .sessionManagement(session ->
+            session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(authz -> authz
+            .anyRequest().authenticated()
+        )
+        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+    return http.build();
+}
+
+// POR QUÊ é seguro desabilitar CSRF em APIs com JWT?
+// CSRF explora cookies de sessão enviados automaticamente pelo browser.
+// APIs com JWT no header Authorization não sofrem deste ataque:
+// um site malicioso não tem acesso ao JWT armazenado em memória.
+
+// ATENÇÃO: Se sua API usar cookies de sessão (não JWT),
+// mantenha o CSRF habilitado!`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -345,6 +502,103 @@ public class CustomUserDetailsService implements UserDetailsService {
           { title: "Spring Security - UserDetailsService", url: "https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/user-details-service.html" },
           { title: "Baeldung - Spring Security Authentication with a Database", url: "https://www.baeldung.com/spring-security-authentication-with-a-database" },
           { title: "Marco Behler - Spring Security In-Depth", url: "https://www.marcobehler.com/guides/spring-security" }
+        ],
+        exercises: [
+          {
+            title: "UserDetailsService com JPA — implementação completa",
+            difficulty: "intermediário",
+            description: `Você tem uma entidade JPA User com campos username, passwordHash, e List<String> roles (ex: ["ADMIN", "USER"]).
+
+Implemente um UserDetailsService completo que:
+1. Carregue o utilizador do repositório JPA
+2. Converta os roles para GrantedAuthority com o prefixo "ROLE_"
+3. Lance UsernameNotFoundException se o utilizador não existir`,
+            hint: "Use SimpleGrantedAuthority(\"ROLE_\" + role) para converter cada string de role. O método deve lançar UsernameNotFoundException, nunca retornar null.",
+            solution: `@Service
+public class JpaUserDetailsService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    public JpaUserDetailsService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String username)
+            throws UsernameNotFoundException {
+        // Buscar utilizador no repositório JPA
+        User user = userRepository.findByUsername(username)
+            .orElseThrow(() -> new UsernameNotFoundException(
+                "Utilizador não encontrado: " + username
+            ));
+
+        // Converter List<String> roles → List<GrantedAuthority>
+        // IMPORTANTE: Spring Security espera o prefixo "ROLE_"
+        List<GrantedAuthority> authorities = user.getRoles().stream()
+            .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+            .collect(Collectors.toList());
+
+        return new org.springframework.security.core.userdetails.User(
+            user.getUsername(),
+            user.getPasswordHash(), // deve ser hash BCrypt
+            authorities
+        );
+    }
+}
+
+// Entidade JPA:
+// @Entity
+// public class User {
+//     private String username;
+//     private String passwordHash;
+//     @ElementCollection
+//     private List<String> roles; // ["ADMIN", "USER"]
+// }`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Codificação de senha — diagnóstico e correção",
+            difficulty: "iniciante",
+            description: `Você armazena senhas em texto simples na base de dados. Após adicionar Spring Security, o login falha mesmo com a senha correta.
+
+1. Explique por que o login falha.
+2. Como configurar o BCryptPasswordEncoder corretamente?
+3. O que é o prefixo {noop} e quando usá-lo?`,
+            hint: "Spring Security usa PasswordEncoder para comparar senhas. Sem um encoder configurado, espera um formato específico. O {noop} funciona apenas para testes.",
+            solution: `// PROBLEMA: Spring Security espera que a senha esteja codificada.
+// Senhas em texto simples causam falha de autenticação.
+
+// PASSO 1: Registrar BCryptPasswordEncoder como bean
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+
+// PASSO 2: Usar BCrypt no UserDetailsService
+// O campo passwordHash na base de dados deve conter o hash BCrypt
+// Ex: "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+
+// PASSO 3: Migrar senhas existentes (texto simples → BCrypt)
+@Autowired
+private PasswordEncoder encoder;
+
+public void migratePassword(Long userId, String plainPassword) {
+    String bcryptHash = encoder.encode(plainPassword);
+    userRepository.updatePassword(userId, bcryptHash);
+}
+
+// {noop} — apenas para TESTES locais (nunca produção):
+// UserDetails user = User.withUsername("test")
+//     .password("{noop}senha123") // Spring Security ignora o encoding
+//     .roles("USER")
+//     .build();`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -416,6 +670,77 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
           { title: "Spring Security - Authorize HTTP Requests", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/authorize-http-requests.html" },
           { title: "Baeldung - URL-based Authorization", url: "https://www.baeldung.com/spring-security-expressions" },
           { title: "Spring Security Samples no GitHub", url: "https://github.com/spring-projects/spring-security-samples" }
+        ],
+        exercises: [
+          {
+            title: "Hierarquia de regras — ordem importa",
+            difficulty: "intermediário",
+            description: `Você define as seguintes regras nesta ordem:
+1. .anyRequest().authenticated()
+2. .requestMatchers("/api/public/**").permitAll()
+
+O endpoint público ainda exige autenticação. Por que isso acontece? Corrija a configuração.`,
+            hint: "As regras são avaliadas em sequência — a primeira correspondência vence. anyRequest() corresponde a qualquer URL, incluindo /api/public/**.",
+            solution: `// ❌ ERRADO: anyRequest() é avaliado primeiro — bloqueia tudo
+@Bean
+public SecurityFilterChain wrongChain(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(authz -> authz
+        .anyRequest().authenticated()            // ← corresponde a TUDO
+        .requestMatchers("/api/public/**").permitAll() // ← nunca alcançado!
+    );
+    return http.build();
+}
+
+// ✅ CORRETO: regras específicas antes de anyRequest()
+@Bean
+public SecurityFilterChain correctChain(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(authz -> authz
+        .requestMatchers("/api/public/**").permitAll()    // ← específico
+        .requestMatchers("/actuator/health").permitAll()  // ← específico
+        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+        .anyRequest().authenticated()                     // ← fallback final
+    );
+    return http.build();
+}
+
+// REGRA: Sempre do mais específico para o mais geral.
+// anyRequest() deve ser o ÚLTIMO elemento.`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "hasRole vs hasAuthority — diferença prática",
+            difficulty: "iniciante",
+            description: `Um utilizador tem a authority "ROLE_ADMIN" na base de dados. Você configura:
+.requestMatchers("/admin/**").hasRole("ADMIN")
+
+O acesso é negado. Ao mudar para .hasAuthority("ROLE_ADMIN") funciona.
+
+1. Explique a diferença entre hasRole() e hasAuthority().
+2. Qual é a convenção recomendada?
+3. Mostre ambas as formas corretas de configuração.`,
+            hint: "hasRole() adiciona automaticamente o prefixo \"ROLE_\" ao string fornecido.",
+            solution: `// hasRole("ADMIN")     → procura por "ROLE_ADMIN" (adiciona "ROLE_" automaticamente)
+// hasAuthority("ADMIN") → procura por "ADMIN" (string exata, sem prefixo)
+
+// ❌ PROBLEMA: utilizador tem "ROLE_ADMIN", mas hasAuthority procura "ADMIN"
+.requestMatchers("/admin/**").hasAuthority("ADMIN") // → acesso negado
+
+// ✅ CORRETO com hasRole (recomendado para papéis)
+.requestMatchers("/admin/**").hasRole("ADMIN") // → equivale a hasAuthority("ROLE_ADMIN")
+
+// ✅ CORRETO com hasAuthority (string completa)
+.requestMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
+
+// CONVENÇÃO recomendada no Spring Security:
+// - hasRole("ADMIN")              → para papéis (ROLE_*)
+// - hasAuthority("READ_DOCUMENTS") → para permissões granulares sem prefixo ROLE_
+
+// Na base de dados, armazene SEMPRE com prefixo para papéis:
+// "ROLE_ADMIN", "ROLE_USER", "ROLE_EDITOR"
+
+// NUNCA misture as convenções no mesmo projeto!`,
+            solutionLanguage: "java"
+          }
         ]
       }
     ]
@@ -519,6 +844,90 @@ public class UserController {
           { title: "Spring Security - Method Security", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html" },
           { title: "Baeldung - Spring Method Security", url: "https://www.baeldung.com/spring-security-method-security" },
           { title: "Vídeo Devoxx - Authorization in Spring Security", url: "https://www.youtube.com/watch?v=LGlyLmxjutI" }
+        ],
+        exercises: [
+          {
+            title: "Segurança por parâmetro — owner ou admin",
+            difficulty: "intermediário",
+            description: `Um método updateUser(Long userId, UserDto dto) deve ser executável somente pelo próprio utilizador (quando userId == seu ID) OU por um ADMIN.
+
+1. Ative a segurança de método na configuração.
+2. Escreva a expressão @PreAuthorize correta.
+3. O que acontece se o parâmetro se chamar userId em vez de id?`,
+            hint: "Use o prefixo # para referenciar parâmetros do método em SpEL: #userId. O objeto authentication é injetado automaticamente.",
+            solution: `// PASSO 1: Ativar segurança de método (obrigatório no Spring Security 6+)
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig { }
+
+// PASSO 2: Anotação no método de serviço
+@Service
+public class UserService {
+
+    // Permite acesso se:
+    // - o utilizador tem ROLE_ADMIN, OU
+    // - o userId do pedido corresponde ao ID do utilizador autenticado
+    @PreAuthorize("hasRole('ADMIN') or #userId == authentication.principal.id")
+    public UserDto updateUser(Long userId, UserDto dto) {
+        // executa somente se a expressão for true
+        return userRepository.save(dto);
+    }
+}
+
+// NOTA: authentication.principal.id requer que o principal implemente getId().
+// Se usar UserDetails padrão (que não tem .id), compare por username:
+@PreAuthorize("hasRole('ADMIN') or #username == authentication.principal.username")
+public UserDto updateUser(String username, UserDto dto) { ... }`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "@PreAuthorize não é executado — 3 causas",
+            difficulty: "avançado",
+            description: `Você anotou um método @Service com @PreAuthorize("hasRole('ADMIN')") mas qualquer utilizador consegue executá-lo — a segurança é ignorada completamente.
+
+Liste e explique 3 causas possíveis para este comportamento e como diagnosticar cada uma.`,
+            hint: "Pense em: configuração ausente, chamadas internas ao bean, e visibilidade do método Java.",
+            solution: `// CAUSA 1: @EnableMethodSecurity ausente na configuração
+// DIAGNÓSTICO: Nenhuma exception, mas qualquer utilizador acessa o método.
+// SOLUÇÃO:
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity // ← OBRIGATÓRIO no Spring Security 6+
+public class SecurityConfig { }
+
+// ─────────────────────────────────────────────────────
+// CAUSA 2: Auto-invocação (self-invocation) — bypassa o proxy AOP
+@Service
+public class OrderService {
+    @PreAuthorize("hasRole('ADMIN')")
+    public void deleteOrder(Long id) { /* protegido */ }
+
+    public void processAndDelete(Long id) {
+        this.deleteOrder(id); // ❌ chamada interna — AOP NÃO interceta!
+    }
+}
+// SOLUÇÃO: Injetar o próprio bean (@Autowired OrderService self)
+// ou mover deleteOrder para outro bean.
+
+// ─────────────────────────────────────────────────────
+// CAUSA 3: Método não-público — Spring AOP não interceta
+@Service
+public class DocumentService {
+    @PreAuthorize("hasRole('EDITOR')")
+    void saveDocument(Document doc) { } // ❌ package-private!
+
+    @PreAuthorize("hasRole('EDITOR')")
+    public void saveDocument(Document doc) { } // ✅ público
+}
+
+// COMO DIAGNOSTICAR:
+// Ative logging DEBUG:
+// logging.level.org.springframework.security=DEBUG
+// Procure por: "Authorizing MethodInvocation"
+// Se não aparecer, o interceptor não está sendo acionado.`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -615,6 +1024,95 @@ public class DocumentService {
           { title: "Spring Security - Expression-Based Access Control", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/expression-based.html" },
           { title: "Spring Framework - SpEL Reference", url: "https://docs.spring.io/spring-framework/reference/core/expressions.html" },
           { title: "Baeldung - SpEL in Spring Security", url: "https://www.baeldung.com/spring-security-expressions" }
+        ],
+        exercises: [
+          {
+            title: "Expressão SpEL com bean Spring — isOwner()",
+            difficulty: "avançado",
+            description: `O acesso a GET /projects/{id} deve ser permitido somente se o utilizador autenticado é o dono do projeto. A verificação de propriedade é uma lógica de negócio complexa que envolve acesso ao banco de dados.
+
+Como você escreve a expressão @PreAuthorize que delega para um bean Spring chamado projectSecurityService?`,
+            hint: "Use a sintaxe @beanName.metodo(args) em SpEL. O parâmetro authentication é injetado automaticamente.",
+            solution: `// BEAN DE POLÍTICA — lógica de negócio separada da anotação
+@Component("projectSecurityService")
+public class ProjectSecurityService {
+
+    private final ProjectRepository projectRepository;
+
+    public ProjectSecurityService(ProjectRepository repo) {
+        this.projectRepository = repo;
+    }
+
+    // Método chamado diretamente pela expressão SpEL
+    public boolean isOwner(Authentication authentication, Long projectId) {
+        String username = authentication.getName();
+        return projectRepository.existsByIdAndOwnerUsername(projectId, username);
+    }
+}
+
+// CONTROLLER com @PreAuthorize delegando para o bean
+@RestController
+@RequestMapping("/projects")
+public class ProjectController {
+
+    // Sintaxe: @nomeDoBean.metodo(args)
+    // authentication é injetado automaticamente pelo contexto SpEL
+    @GetMapping("/{id}")
+    @PreAuthorize("@projectSecurityService.isOwner(authentication, #id)")
+    public ProjectDto getProject(@PathVariable Long id) {
+        return projectService.findById(id);
+    }
+}
+
+// POR QUÊ usar um bean em vez de SpEL inline?
+// SpEL inline não pode acessar repositórios JPA nem ter lógica complexa.
+// Beans permitem injeção de dependências, testes unitários e reuso.`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Depurando ELException em expressão SpEL",
+            difficulty: "avançado",
+            description: `A seguinte anotação lança ELException em runtime:
+@PreAuthorize("authentication.principal.username == #dto.ownerId")
+
+Mensagem: "Property or field 'ownerId' cannot be found on object of type String"
+
+1. Explique a causa raiz do erro.
+2. Como diagnosticar o tipo exato de authentication.principal?
+3. Implemente 2 formas corretas de resolver.`,
+            hint: "authentication.principal.username retorna um String. String não tem a propriedade 'ownerId'. O problema pode ser de tipo ou nome de campo.",
+            solution: `// DIAGNÓSTICO DO ERRO:
+// authentication.principal é o UserDetails (ou implementação customizada)
+// .username retorna uma String
+// String não tem campo 'ownerId' → ELException
+
+// COMO INSPECIONAR o tipo do principal:
+@GetMapping("/debug-principal")
+public String debugPrincipal(Authentication auth) {
+    return auth.getPrincipal().getClass().getName()
+        + ": " + auth.getPrincipal();
+}
+
+// ✅ CORREÇÃO 1: Comparar username com username (mesmo tipo)
+// Se #dto.ownerUsername é String:
+@PreAuthorize("authentication.principal.username == #dto.ownerUsername")
+
+// ✅ CORREÇÃO 2: CustomUserDetails com getId()
+// Requer que o principal implemente getId():
+@PreAuthorize("authentication.principal.id == #dto.ownerId")
+
+// Para implementar CustomUserDetails:
+public class CustomUserDetails implements UserDetails {
+    private final Long id;
+    private final String username;
+    // ... outros campos e métodos UserDetails
+    public Long getId() { return id; }
+}
+
+// ✅ CORREÇÃO 3 (mais robusta): Delegar para um bean
+@PreAuthorize("@documentPolicy.canAccess(authentication, #dto)")`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -708,6 +1206,84 @@ public class TaskService {
           { title: "Spring Security - @PostAuthorize", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html#use-postauthorize" },
           { title: "Baeldung - @PreFilter and @PostFilter", url: "https://www.baeldung.com/spring-security-prefilter-postfilter" },
           { title: "Spring Security Reference - Method Security", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html" }
+        ],
+        exercises: [
+          {
+            title: "@PostFilter — filtrar documentos por tenant",
+            difficulty: "intermediário",
+            description: `Um método retorna List<Document> e documentos pertencem a diferentes tenants. Usando @PostFilter, garanta que utilizadores só recebam documentos onde document.tenantId corresponde ao seu tenantId autenticado.
+
+Quais são as implicações de performance desta abordagem?`,
+            hint: "Use filterObject para referenciar o elemento atual na iteração. @PostFilter modifica (muta) a coleção retornada.",
+            solution: `@Service
+public class DocumentService {
+
+    // @PostFilter avalia a expressão para CADA elemento da lista
+    // e remove os que retornam false
+    @PostFilter("filterObject.tenantId == authentication.principal.tenantId")
+    public List<Document> findAllDocuments() {
+        // Retorna TODOS os documentos — Spring Security filtra depois
+        return documentRepository.findAll();
+    }
+}
+
+// IMPLICAÇÕES DE PERFORMANCE:
+// @PostFilter carrega TODOS os registros do banco e filtra em memória.
+// Para 10.000 documentos de 50 tenants:
+// - Carrega 10.000 registros da base de dados
+// - Filtra em memória → retorna ~200 registros
+// - Enorme desperdício de recursos!
+
+// ALTERNATIVA EFICIENTE (recomendada para grandes volumes):
+public List<Document> findDocumentsByTenant(Authentication auth) {
+    Long tenantId = ((CustomUserDetails) auth.getPrincipal()).getTenantId();
+    return documentRepository.findByTenantId(tenantId); // filtra na query SQL
+}
+
+// QUANDO usar @PostFilter:
+// ✅ Listas pequenas (< 500 itens)
+// ✅ Protótipos rápidos
+// ❌ EVITAR em tabelas grandes — impacto severo de performance`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "@PostAuthorize vs @PreAuthorize — acesso por proprietário",
+            difficulty: "avançado",
+            description: `O método getOrder(Long id) carrega um pedido do banco de dados. Somente o dono do pedido ou um ADMIN deve receber o resultado.
+
+1. Deve usar @PreAuthorize ou @PostAuthorize? Por quê?
+2. Implemente a solução correta.
+3. Qual é o risco de usar @PostAuthorize em operações de escrita?`,
+            hint: "@PreAuthorize executa ANTES do método — não tem acesso ao objeto retornado. @PostAuthorize executa DEPOIS — tem acesso via returnObject.",
+            solution: `@Service
+public class OrderService {
+
+    // ✅ CORRETO: @PostAuthorize — verifica o proprietário no objeto retornado
+    // O pedido PRECISA ser carregado primeiro para saber quem é o dono.
+    @PostAuthorize("returnObject.ownerUsername == authentication.principal.username" +
+                   " or hasRole('ADMIN')")
+    public Order getOrder(Long id) {
+        return orderRepository.findById(id)
+            .orElseThrow(() -> new OrderNotFoundException(id));
+    }
+}
+
+// POR QUÊ @PreAuthorize NÃO funciona aqui:
+// @PreAuthorize só tem acesso aos PARÂMETROS (#id).
+// O ID sozinho não diz quem é o dono — a entidade precisa ser carregada.
+// @PreAuthorize("@orderService.isOwner(#id, auth)") faria 2 queries.
+
+// QUANDO usar cada um:
+// @PreAuthorize: decisão baseada em PARÂMETROS (role, ID do utilizador)
+// @PostAuthorize: decisão baseada nos DADOS RETORNADOS (ownership, atributos)
+
+// ⚠️ RISCO com @PostAuthorize em operações de ESCRITA:
+// O método EXECUTA antes da verificação!
+// Se saveOrder() escreve no banco e depois @PostAuthorize nega,
+// a escrita já ocorreu — mas a resposta é negada.
+// Use @PostAuthorize APENAS em operações de LEITURA.`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -795,6 +1371,96 @@ public class UserManagementService {
           { title: "Spring Security - Meta Annotations", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html#meta-annotations" },
           { title: "Baeldung - Custom Security Annotations", url: "https://www.baeldung.com/spring-security-method-security" },
           { title: "Vídeo Devoxx - Authorization in Spring Security", url: "https://www.youtube.com/watch?v=LGlyLmxjutI" }
+        ],
+        exercises: [
+          {
+            title: "Criar @IsResourceOwner — meta-anotação reutilizável",
+            difficulty: "intermediário",
+            description: `Em 12 métodos do seu codebase você repete:
+@PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+
+Crie uma meta-anotação @IsResourceOwner que encapsule esta regra, tornando o código mais legível e manutenível.`,
+            hint: "A meta-anotação é uma @interface anotada com @PreAuthorize. O parâmetro do método deve se chamar 'id' para que #id funcione.",
+            solution: `// PASSO 1: Definir a meta-anotação
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+public @interface IsResourceOwner {
+    // A expressão SpEL referencia #id
+    // O parâmetro do método anotado DEVE se chamar 'id'
+}
+
+// PASSO 2: Usar nos métodos
+@Service
+public class UserService {
+
+    @IsResourceOwner
+    public UserDto getUser(Long id) { return userRepository.findById(id); }
+
+    @IsResourceOwner
+    public void updateUser(Long id, UserDto dto) { /* ... */ }
+
+    @IsResourceOwner
+    public void deleteUser(Long id) { /* ... */ }
+}
+
+// ANTES: 12 métodos com @PreAuthorize longa e repetida
+// DEPOIS: 12 métodos com @IsResourceOwner — legível e centralizado
+
+// PASSO 3: Se o parâmetro tiver nome diferente de 'id':
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@PreAuthorize("hasRole('ADMIN') or #userId == authentication.principal.id")
+public @interface IsUserOwner {
+    // Use quando o parâmetro se chama 'userId'
+}`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Meta-anotação com role como parâmetro",
+            difficulty: "avançado",
+            description: `Você quer criar @RequiresRole("EDITOR") onde a role é um parâmetro da anotação.
+
+1. Implemente a meta-anotação.
+2. Explique a limitação crítica de roles dinâmicas em anotações.
+3. Qual é a alternativa quando a role precisa ser determinada em runtime?`,
+            hint: "Use @AliasFor para mapear o atributo da anotação para o valor de @PreAuthorize. A role deve ser uma constante em tempo de compilação.",
+            solution: `// IMPLEMENTAÇÃO da meta-anotação com parâmetro
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@PreAuthorize("hasRole('{role}')")
+public @interface RequiresRole {
+    // Spring Security substitui {role} pelo valor do atributo
+    @AliasFor(annotation = PreAuthorize.class, attribute = "value")
+    String role() default "";
+    // ATENÇÃO: Esta sintaxe específica de substituição pode variar
+    // entre versões. Teste com sua versão do Spring Security.
+}
+
+// USO:
+@Service
+public class ContentService {
+    @RequiresRole("EDITOR")
+    public void publishArticle(Article article) { }
+
+    @RequiresRole("MODERATOR")
+    public void removeComment(Long id) { }
+}
+
+// ⚠️ LIMITAÇÃO CRÍTICA:
+// Anotações Java são processadas em tempo de compilação.
+// O valor do atributo DEVE ser uma constante:
+// ✅ @RequiresRole("EDITOR")         — constante literal
+// ❌ @RequiresRole(user.getRole())   — impossível em Java
+
+// Spring Security lê a expressão SpEL ao criar o proxy AOP (startup),
+// não quando o método é chamado. Portanto, roles dinâmicas são inviáveis.
+
+// ALTERNATIVA para roles determinadas em runtime:
+@PreAuthorize("@rolePolicy.hasRequiredRole(authentication, #requiredRole)")
+public void sensitiveOperation(String requiredRole) { }`,
+            solutionLanguage: "java"
+          }
         ]
       }
     ]
@@ -915,6 +1581,103 @@ public class AuthorizationConfig {
           { title: "Spring Security - Authentication Architecture", url: "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html" },
           { title: "Spring Security - SecurityContext", url: "https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html#servlet-authentication-securitycontext" },
           { title: "Baeldung - SecurityContext and SecurityContextHolder", url: "https://www.baeldung.com/spring-security-context-propagation" }
+        ],
+        exercises: [
+          {
+            title: "SecurityContext em threads assíncronas — contexto perdido",
+            difficulty: "avançado",
+            description: `Você tem um método @Async que lê SecurityContextHolder.getContext().getAuthentication() para obter o utilizador atual. Em produção, o resultado é sempre null dentro do método assíncrono.
+
+1. Explique por que o contexto é null.
+2. Mostre 2 formas de resolver, explicando as limitações de cada uma.`,
+            hint: "SecurityContextHolder usa ThreadLocal por padrão. ThreadLocal não é propagado para novas threads automaticamente.",
+            solution: `// CAUSA: SecurityContextHolder usa ThreadLocal por padrão.
+// O contexto NÃO é propagado para novas threads (inclusive thread pools @Async).
+
+// SOLUÇÃO 1: DelegatingSecurityContextExecutor (recomendada para thread pools)
+@Configuration
+@EnableAsync
+public class AsyncConfig implements AsyncConfigurer {
+
+    @Override
+    public Executor getAsyncExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(10);
+        executor.initialize();
+        // Propaga o SecurityContext para cada task submetida ao pool
+        return new DelegatingSecurityContextExecutorService(
+            executor.getThreadPoolExecutor()
+        );
+    }
+}
+
+// SOLUÇÃO 2: MODE_INHERITABLETHREADLOCAL (simples mas com limitações)
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        // Propaga o contexto para threads FILHAS criadas diretamente
+        SecurityContextHolder.setStrategyName(
+            SecurityContextHolder.MODE_INHERITABLETHREADLOCAL
+        );
+        SpringApplication.run(Application.class, args);
+    }
+}
+
+// ⚠️ LIMITAÇÃO da Solução 2:
+// InheritableThreadLocal propaga do thread CRIADOR para thread FILHA.
+// Em thread pools (@Async), a thread foi criada ANTES do pedido.
+// O contexto propagado é o do pool, não do utilizador atual.
+// Use sempre a Solução 1 para @Async com ThreadPoolTaskExecutor.`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Inspecionar Authentication no controller",
+            difficulty: "iniciante",
+            description: `Escreva um endpoint REST GET /api/me que retorna:
+1. O username do utilizador autenticado
+2. A lista de authorities/roles
+3. Se é autenticação completa (não remember-me)
+
+Use a injeção de Authentication pelo Spring MVC. Explique a diferença entre isAuthenticated() e isFullyAuthenticated().`,
+            hint: "Spring MVC injeta o Authentication automaticamente como parâmetro do método do controller.",
+            solution: `@RestController
+@RequestMapping("/api/me")
+public class AuthInfoController {
+
+    @GetMapping
+    public Map<String, Object> getCurrentUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return Map.of("authenticated", false);
+        }
+
+        // 1. Username
+        String username = authentication.getName(); // ou getPrincipal().toString()
+
+        // 2. Lista de authorities
+        List<String> authorities = authentication.getAuthorities().stream()
+            .map(GrantedAuthority::getAuthority)
+            .collect(Collectors.toList());
+
+        // 3. isAuthenticated() vs isFullyAuthenticated():
+        // - isAuthenticated(): true para autenticação completa E remember-me
+        // - isFullyAuthenticated(): true APENAS para autenticação completa
+        // RememberMeAuthenticationToken.isAuthenticated() = true,
+        // mas não é "fully authenticated" — exige login para operações sensíveis
+        boolean fullyAuthenticated =
+            !(authentication instanceof RememberMeAuthenticationToken);
+
+        return Map.of(
+            "username", username,
+            "authorities", authorities,
+            "isAuthenticated", authentication.isAuthenticated(),
+            "isFullyAuthenticated", fullyAuthenticated,
+            "principalType", authentication.getPrincipal().getClass().getSimpleName()
+        );
+    }
+}`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -1027,6 +1790,104 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
           { title: "Spring Security - Authorization Architecture", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/architecture.html" },
           { title: "Spring Security 6 Migration Guide", url: "https://docs.spring.io/spring-security/reference/migration-7/index.html" },
           { title: "Baeldung - Custom Authorization with Spring Security", url: "https://www.baeldung.com/spring-security-custom-authorization-manager" }
+        ],
+        exercises: [
+          {
+            title: "AuthorizationManager personalizado — IP + role",
+            difficulty: "avançado",
+            description: `Você precisa de uma lógica de autorização que não pode ser expressa em SpEL: o acesso é concedido somente se o pedido vem de um IP em um range CIDR permitido E o utilizador tem ROLE_API.
+
+Implemente um AuthorizationManager personalizado e integre-o na SecurityFilterChain.`,
+            hint: "Implemente AuthorizationManager<RequestAuthorizationContext>. O contexto dá acesso ao HttpServletRequest e ao Authentication.",
+            solution: `// PASSO 1: Implementar o AuthorizationManager personalizado
+@Component
+public class IpAndRoleAuthorizationManager
+        implements AuthorizationManager<RequestAuthorizationContext> {
+
+    private static final InetAddressRange ALLOWED_RANGE =
+        InetAddressRange.ofCidr("10.0.0.0/8");
+
+    @Override
+    public AuthorizationDecision check(
+            Supplier<Authentication> authenticationSupplier,
+            RequestAuthorizationContext context) {
+
+        HttpServletRequest request = context.getRequest();
+        Authentication authentication = authenticationSupplier.get();
+
+        // Verificar se o IP está no range permitido
+        String remoteAddr = request.getRemoteAddr();
+        boolean ipAllowed = ALLOWED_RANGE.contains(remoteAddr);
+
+        // Verificar se o utilizador tem ROLE_API
+        boolean hasRole = authentication.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_API"));
+
+        // AMBAS as condições devem ser verdadeiras
+        return new AuthorizationDecision(ipAllowed && hasRole);
+    }
+}
+
+// PASSO 2: Registrar na SecurityFilterChain
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http,
+        IpAndRoleAuthorizationManager authManager) throws Exception {
+    http.authorizeHttpRequests(authz -> authz
+        .requestMatchers("/api/**").access(authManager) // usar o manager customizado
+        .anyRequest().denyAll()
+    );
+    return http.build();
+}`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Compor Authorization Managers com allOf()",
+            difficulty: "avançado",
+            description: `Você tem 3 regras que devem ser satisfeitas SIMULTANEAMENTE:
+1. Utilizador está autenticado
+2. Utilizador tem ROLE_EDITOR
+3. O pedido é feito entre 09h-18h (horário de trabalho)
+
+Como compor estas 3 regras usando os mecanismos built-in do Spring Security sem criar um único AuthorizationManager monolítico?`,
+            hint: "Use AuthorizationManagers.allOf() para compor múltiplos managers. Spring Security tem AuthenticatedAuthorizationManager e AuthorityAuthorizationManager prontos.",
+            solution: `// PASSO 1: AuthorizationManager para horário de trabalho
+@Component
+public class BusinessHoursAuthorizationManager
+        implements AuthorizationManager<RequestAuthorizationContext> {
+
+    @Override
+    public AuthorizationDecision check(
+            Supplier<Authentication> auth,
+            RequestAuthorizationContext context) {
+        int hour = LocalTime.now().getHour();
+        return new AuthorizationDecision(hour >= 9 && hour < 18);
+    }
+}
+
+// PASSO 2: Compor com allOf()
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http,
+        BusinessHoursAuthorizationManager businessHours) throws Exception {
+
+    // allOf() exige que TODOS os managers retornem true
+    AuthorizationManager<RequestAuthorizationContext> composedManager =
+        AuthorizationManagers.allOf(
+            AuthenticatedAuthorizationManager.authenticated(),    // autenticado
+            AuthorityAuthorizationManager.hasRole("EDITOR"),      // ROLE_EDITOR
+            businessHours                                         // horário comercial
+        );
+
+    http.authorizeHttpRequests(authz -> authz
+        .requestMatchers("/api/editorial/**").access(composedManager)
+        .anyRequest().denyAll()
+    );
+    return http.build();
+}
+
+// anyOf() também existe — pelo menos UM manager deve retornar true
+// Útil para: "ADMIN OU proprietário do recurso"`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -1148,6 +2009,101 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
           { title: "Spring Security - Servlet Architecture", url: "https://docs.spring.io/spring-security/reference/servlet/architecture.html" },
           { title: "Spring Security - ExceptionTranslationFilter", url: "https://docs.spring.io/spring-security/reference/servlet/architecture.html#servlet-exceptiontranslationfilter" },
           { title: "Baeldung - Spring Security Filters Chain", url: "https://www.baeldung.com/spring-security-registered-filters" }
+        ],
+        exercises: [
+          {
+            title: "Tracing de requisição negada — 403 no filter chain",
+            difficulty: "avançado",
+            description: `Um pedido GET /api/reports retorna 403. Você precisa determinar qual componente exato na filter chain produziu o 403.
+
+1. Que logs você habilita?
+2. Qual classe processa o AccessDeniedException e envia o 403?
+3. Onde no filter chain a decisão de autorização é tomada?`,
+            hint: "Habilite logging DEBUG do Spring Security. Identifique AuthorizationFilter, ExceptionTranslationFilter e AccessDeniedHandler no trace.",
+            solution: `// PASSO 1: Habilitar logging DEBUG
+// application.properties:
+// logging.level.org.springframework.security=DEBUG
+// logging.level.org.springframework.security.web.FilterChainProxy=TRACE
+
+// PASSO 2: Analisar o trace de logs para uma requisição negada
+// Os logs relevantes aparecem nesta ordem:
+
+// [FilterChainProxy] Securing GET /api/reports
+// [SecurityContextHolderFilter] Set SecurityContextHolder to ...
+// [UsernamePasswordAuthenticationFilter] (ou OAuth2/JWT)
+// [AuthorizationFilter] Authorizing GET /api/reports  ← DECISÃO aqui
+// [AuthorizationFilter] Access denied. Authenticated=true, required=ROLE_ADMIN
+// [ExceptionTranslationFilter] Sending to AccessDeniedHandler  ← CAPTURA aqui
+
+// PASSO 3: Identificar os componentes
+// AuthorizationFilter (linha ~30 no filter chain):
+//   - Chama AuthorizationManager.check(authentication, request)
+//   - Lança AccessDeniedException se negado
+
+// ExceptionTranslationFilter (linha ~25, ANTES de AuthorizationFilter):
+//   - Captura SecurityException e AuthenticationException
+//   - Para AccessDeniedException: delega para AccessDeniedHandler
+
+// AccessDeniedHandler padrão: AccessDeniedHandlerImpl
+//   - Envia resposta 403 Forbidden
+//   - Pode ser customizado para JSON:
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http.exceptionHandling(ex -> ex
+        .accessDeniedHandler((request, response, exception) -> {
+            response.setContentType("application/json");
+            response.setStatus(403);
+            response.getWriter().write(
+                "{\"error\":\"forbidden\",\"path\":\"" +
+                request.getRequestURI() + "\"}"
+            );
+        })
+    );
+    return http.build();
+}`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Filtro customizado — posição incorreta na chain",
+            difficulty: "avançado",
+            description: `Você adiciona um OncePerRequestFilter que lê SecurityContextHolder.getContext().getAuthentication(). O Authentication é null intermitentemente.
+
+O filtro foi registrado como um servlet filter padrão (não via Spring Security).
+
+Explique por que Authentication pode ser null e corrija o problema.`,
+            hint: "Um filtro registrado fora do Spring Security pode executar antes que o SecurityContextHolder seja populado. Use addFilterAfter() para posicioná-lo corretamente.",
+            solution: `// PROBLEMA:
+// Filtros registrados como servlet padrão (FilterRegistrationBean ou
+// @Component em OncePerRequestFilter) executam FORA do FilterChainProxy.
+// Dependendo da ordem do servlet container, podem rodar ANTES de
+// SecurityContextHolderFilter — que é quem popula o SecurityContext.
+
+// ❌ ERRADO: Registro como servlet filter padrão
+@Bean
+public FilterRegistrationBean<MyFilter> myFilter() {
+    FilterRegistrationBean<MyFilter> reg = new FilterRegistrationBean<>(new MyFilter());
+    reg.setOrder(1); // pode executar antes do Spring Security!
+    return reg;
+}
+
+// ✅ CORRETO: Registrar DENTRO da SecurityFilterChain
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http
+        // Executar após SecurityContextHolderFilter (que popula o contexto)
+        .addFilterAfter(new MyFilter(), SecurityContextHolderFilter.class)
+        // OU: executar antes de AuthorizationFilter (mas depois do contexto)
+        .addFilterBefore(new MyFilter(), AuthorizationFilter.class)
+        .authorizeHttpRequests(authz -> authz.anyRequest().authenticated());
+    return http.build();
+}
+
+// DIAGNÓSTICO: Para ver a ordem dos filtros ativos:
+// logging.level.org.springframework.security.web.FilterChainProxy=DEBUG
+// "Security filter chain: [SecurityContextHolderFilter, ...]"
+// Seu filtro deve aparecer nesta lista, não fora dela.`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -1269,6 +2225,129 @@ public class ConfidentialDataService {
           { title: "Spring Security - Method Security Architecture", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html" },
           { title: "Spring Framework - AOP Proxies", url: "https://docs.spring.io/spring-framework/reference/core/aop/proxying.html" },
           { title: "Baeldung - Method Security Internals", url: "https://www.baeldung.com/spring-security-method-security" }
+        ],
+        exercises: [
+          {
+            title: "@PreAuthorize e @Transactional — ordem dos interceptors AOP",
+            difficulty: "avançado",
+            description: `Você tem um método anotado com @PreAuthorize e @Transactional. Observa que a verificação de segurança executa DENTRO da transação (a transação abre primeiro).
+
+1. Por que isso acontece?
+2. É um problema? Em que cenário pode causar comportamento indesejado?
+3. Como controlar a ordem?`,
+            hint: "Spring AOP usa valores de order para determinar qual advice envolve qual. @Transactional tem order=Integer.MAX_VALUE por padrão.",
+            solution: `// Por que a transação abre antes da segurança?
+// @Transactional default order = Integer.MAX_VALUE (baixa prioridade = externo)
+// @EnableMethodSecurity default order = 0 (alta prioridade = interno)
+// WAIT — na verdade é o oposto:
+// Maior order = mais externo na pilha de proxies = executa PRIMEIRO
+
+// Spring Security @EnableMethodSecurity usa order = 0 por padrão
+// @Transactional usa order = Integer.MAX_VALUE — executa por ÚLTIMO (mais interno)
+// Portanto: Security ANTES da transaction por padrão ✅ (correto)
+
+// SE você observa transação antes: verifique se @EnableMethodSecurity
+// foi configurado com order alto:
+// @EnableMethodSecurity → ordena os interceptors de segurança
+
+// CONTROLAR a ordem explicitamente:
+@Configuration
+@EnableMethodSecurity(order = 500) // segurança com order 500
+public class SecurityConfig { }
+
+@Configuration
+@EnableTransactionManagement(order = 100) // transação com order 100 = mais externo
+public class TransactionConfig { }
+// Resultado: Transação abre ANTES, segurança verifica DENTRO da transação
+
+// PROBLEMA de segurança DENTRO da transação:
+// Se a verificação consultar dados da própria transação (ex: ownership),
+// pode ler dados uncommitted ou ter comportamento inesperado.
+// RECOMENDADO: Segurança ANTES da transação (order de segurança < order de transação)
+// Ex: @EnableMethodSecurity(order = 50), @EnableTransactionManagement(order = 100)`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "PermissionEvaluator e hasPermission() em @PreAuthorize",
+            difficulty: "avançado",
+            description: `Você quer usar hasPermission(#document, 'WRITE') em @PreAuthorize, onde a lógica de permissão é delegada para um PermissionEvaluator personalizado.
+
+Implemente o setup completo: PermissionEvaluator, configuração do MethodSecurityExpressionHandler, e exemplo de uso.`,
+            hint: "Implemente a interface PermissionEvaluator e registre um MethodSecurityExpressionHandler bean que configure o evaluator.",
+            solution: `// PASSO 1: Implementar PermissionEvaluator
+@Component
+public class DocumentPermissionEvaluator implements PermissionEvaluator {
+
+    private final DocumentRepository documentRepository;
+
+    public DocumentPermissionEvaluator(DocumentRepository repo) {
+        this.documentRepository = repo;
+    }
+
+    // Chamado por hasPermission(targetDomainObject, permission)
+    @Override
+    public boolean hasPermission(Authentication auth, Object targetDomainObject,
+                                  Object permission) {
+        if (targetDomainObject instanceof Document document) {
+            String username = auth.getName();
+            String perm = permission.toString();
+            return switch (perm) {
+                case "READ" -> document.isPublic() ||
+                               document.getOwnerUsername().equals(username);
+                case "WRITE" -> document.getOwnerUsername().equals(username) ||
+                                hasRole(auth, "EDITOR");
+                case "DELETE" -> hasRole(auth, "ADMIN");
+                default -> false;
+            };
+        }
+        return false;
+    }
+
+    // Chamado por hasPermission(targetId, targetType, permission)
+    @Override
+    public boolean hasPermission(Authentication auth, Serializable targetId,
+                                  String targetType, Object permission) {
+        if ("Document".equals(targetType)) {
+            Document doc = documentRepository.findById((Long) targetId)
+                .orElse(null);
+            return doc != null && hasPermission(auth, doc, permission);
+        }
+        return false;
+    }
+
+    private boolean hasRole(Authentication auth, String role) {
+        return auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
+    }
+}
+
+// PASSO 2: Registrar no MethodSecurityExpressionHandler
+@Configuration
+@EnableMethodSecurity
+public class MethodSecurityConfig {
+
+    @Bean
+    public MethodSecurityExpressionHandler methodSecurityExpressionHandler(
+            DocumentPermissionEvaluator permissionEvaluator) {
+        DefaultMethodSecurityExpressionHandler handler =
+            new DefaultMethodSecurityExpressionHandler();
+        handler.setPermissionEvaluator(permissionEvaluator);
+        return handler;
+    }
+}
+
+// PASSO 3: Usar em @PreAuthorize
+@Service
+public class DocumentService {
+
+    @PreAuthorize("hasPermission(#document, 'WRITE')")
+    public void updateDocument(Document document) { }
+
+    @PreAuthorize("hasPermission(#id, 'Document', 'DELETE')")
+    public void deleteDocument(Long id) { }
+}`,
+            solutionLanguage: "java"
+          }
         ]
       }
     ]
@@ -1410,6 +2489,104 @@ public class DepartmentService {
           { title: "Baeldung - Access Control Models", url: "https://www.baeldung.com/java-access-control-models" },
           { title: "Spring Security - ACLs", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/acls.html" },
           { title: "NIST RBAC Model", url: "https://csrc.nist.gov/projects/role-based-access-control" }
+        ],
+        exercises: [
+          {
+            title: "Evoluir de RBAC para ABAC sem reescrever tudo",
+            difficulty: "avançado",
+            description: `Seu sistema atual usa RBAC: ROLE_MANAGER pode aprovar todos os gastos. Um novo requisito chega: managers só podem aprovar gastos do seu próprio departamento E abaixo de $10.000. O modelo RBAC não consegue expressar esta regra.
+
+Como você evolui para ABAC sem reescrever a autenticação e sem perder as roles existentes?`,
+            hint: "Mantenha ROLE_MANAGER como GrantedAuthority. Adicione @PreAuthorize com SpEL delegando para um bean de política que acessa departamento e valor.",
+            solution: `// ESTRATÉGIA: Combinar RBAC (roles) com ABAC (atributos)
+// Mantém ROLE_MANAGER existente, adiciona regras de atributos
+
+// PASSO 1: Bean de política ABAC
+@Component("expensePolicy")
+public class ExpenseAuthorizationPolicy {
+
+    public boolean canApprove(Authentication auth, Expense expense) {
+        // Verificar role RBAC (pode ser um utilizador com ROLE_ADMIN — aprova tudo)
+        boolean isAdmin = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        if (isAdmin) return true;
+
+        // Verificar atributos ABAC para MANAGER
+        CustomUserDetails principal = (CustomUserDetails) auth.getPrincipal();
+
+        // Regra 1: mesmo departamento
+        boolean sameDepartment = principal.getDepartmentId()
+            .equals(expense.getDepartmentId());
+
+        // Regra 2: valor abaixo do limite
+        boolean withinLimit = expense.getAmount()
+            .compareTo(new BigDecimal("10000")) < 0;
+
+        return sameDepartment && withinLimit;
+    }
+}
+
+// PASSO 2: Serviço com @PreAuthorize
+@Service
+public class ExpenseService {
+
+    @PreAuthorize("hasRole('MANAGER') and @expensePolicy.canApprove(authentication, #expense)")
+    public void approveExpense(Expense expense) {
+        expense.setApproved(true);
+        expenseRepository.save(expense);
+    }
+}
+
+// VANTAGEM desta abordagem híbrida:
+// - Sem reescrita da autenticação
+// - Sem alterações na base de dados de utilizadores
+// - A política ABAC é centralizada, testável e versionável`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "ABAC vs ACL — escolher o modelo correto",
+            difficulty: "avançado",
+            description: `Um sistema de gestão de documentos precisa de:
+(a) Regra geral: utilizadores com ROLE_EDITOR podem editar documentos
+(b) Documentos "bloqueados" só podem ser editados pelo autor original, mesmo que seja EDITOR
+
+Avalie se deve usar ABAC ou ACL para este caso. Implemente a solução com o modelo escolhido.`,
+            hint: "ACL é ideal para permissões por instância de objeto geridas por utilizadores finais. ABAC é melhor para regras de atributos do domínio.",
+            solution: `// AVALIAÇÃO:
+// ACL: ideal quando utilizadores FINAIS gerenciam permissões por objeto
+//      (ex: Google Drive — "compartilhar este arquivo com João")
+// ABAC: ideal quando as REGRAS vêm de atributos do domínio
+//       (ex: "documentos bloqueados só pelo autor" — regra fixa)
+
+// DECISÃO: ABAC — a regra é estática (atributo 'locked' + 'authorId')
+// ACL seria excessivo: criaria entradas de permissão para cada documento
+
+// ✅ IMPLEMENTAÇÃO com ABAC via @PreAuthorize
+@Service
+public class DocumentService {
+
+    @PreAuthorize(
+        "hasRole('EDITOR') and " +
+        "(!#doc.locked or #doc.authorUsername == authentication.principal.username)"
+    )
+    public void updateDocument(Document doc) {
+        documentRepository.save(doc);
+    }
+}
+
+// LEITURA DA EXPRESSÃO:
+// hasRole('EDITOR')   → precisa ser EDITOR
+// AND
+// (!doc.locked        → documento NÃO está bloqueado
+//   OR                → OU
+//  doc.authorUsername == username)  → é o autor original
+
+// QUANDO ACL seria justificado neste cenário?
+// Se os utilizadores pudessem compartilhar documentos com outros utilizadores
+// individualmente (não por regra de negócio, mas por escolha do utilizador),
+// aí ACL faria sentido — cada documento teria sua própria lista de acessos.`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -1537,6 +2714,118 @@ public class ApiControllerSecurityTest {
           { title: "Spring Security - Testing", url: "https://docs.spring.io/spring-security/reference/servlet/test/index.html" },
           { title: "Baeldung - Spring Security Integration Tests", url: "https://www.baeldung.com/spring-security-integration-tests" },
           { title: "Spring Security Test - Method Security", url: "https://docs.spring.io/spring-security/reference/servlet/test/method.html" }
+        ],
+        exercises: [
+          {
+            title: "Testar @PreAuthorize com MockMvc — 3 cenários",
+            difficulty: "intermediário",
+            description: `Você tem o endpoint DELETE /api/documents/{id} anotado com:
+@PreAuthorize("@documentService.isOwner(#id, authentication)")
+
+Escreva um teste completo @SpringBootTest + MockMvc que verifique:
+(a) Não-proprietário recebe 403
+(b) Proprietário recebe 200
+(c) Utilizador não autenticado recebe 401`,
+            hint: "Use @WithMockUser para simular utilizadores e @MockBean para mockar o documentService. Configure retornos diferentes do isOwner() para cada cenário.",
+            solution: `@SpringBootTest
+@AutoConfigureMockMvc
+class DocumentControllerSecurityTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private DocumentService documentService;
+
+    // (a) Não-proprietário → 403 Forbidden
+    @Test
+    @WithMockUser(username = "alice")
+    void nonOwner_shouldReturn403() throws Exception {
+        when(documentService.isOwner(42L,
+            SecurityMockMvcRequestPostProcessors.authentication(
+                SecurityContextHolder.getContext().getAuthentication())))
+            .thenReturn(false);
+
+        mockMvc.perform(delete("/api/documents/42"))
+            .andExpect(status().isForbidden());
+    }
+
+    // (b) Proprietário → 200 OK
+    @Test
+    @WithMockUser(username = "bob")
+    void owner_shouldReturn200() throws Exception {
+        // Usando argumentMatchers para o mock
+        when(documentService.isOwner(eq(42L), any(Authentication.class)))
+            .thenReturn(true);
+        doNothing().when(documentService).deleteDocument(42L);
+
+        mockMvc.perform(delete("/api/documents/42"))
+            .andExpect(status().isOk());
+    }
+
+    // (c) Não autenticado → 401 Unauthorized
+    @Test
+    void unauthenticated_shouldReturn401() throws Exception {
+        mockMvc.perform(delete("/api/documents/42"))
+            .andExpect(status().isUnauthorized());
+    }
+}
+
+// DICA: Para principals customizados, use @WithSecurityContext:
+@Retention(RetentionPolicy.RUNTIME)
+@WithSecurityContext(factory = WithCustomUserSecurityContextFactory.class)
+public @interface WithCustomUser {
+    long id();
+    String username();
+}`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Testar segurança de método com @WithMockUser e Mockito",
+            difficulty: "intermediário",
+            description: `Você tem um @Service com o método:
+@PreAuthorize("hasRole('ADMIN')")
+public void deleteAllUsers() { ... }
+
+Escreva dois testes unitários:
+1. Verificar que ADMIN consegue executar (sem exception)
+2. Verificar que USER recebe AccessDeniedException`,
+            hint: "Use @ExtendWith(SpringExtension.class) + @WithMockUser(roles=\"ADMIN\") para simular roles. Spring Security intercepta via AOP.",
+            solution: `@ExtendWith(SpringExtension.class)
+@SpringBootTest
+class UserServiceSecurityTest {
+
+    @Autowired
+    private UserService userService;
+
+    // Teste 1: ADMIN pode executar
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void admin_canDeleteAllUsers() {
+        // Não deve lançar nenhuma exception
+        assertDoesNotThrow(() -> userService.deleteAllUsers());
+    }
+
+    // Teste 2: USER recebe AccessDeniedException
+    @Test
+    @WithMockUser(roles = "USER")
+    void regularUser_cannotDeleteAllUsers() {
+        // Spring Security lança AccessDeniedException antes do método executar
+        assertThrows(AccessDeniedException.class,
+            () -> userService.deleteAllUsers());
+    }
+
+    // ALTERNATIVA com SecurityMockMvcRequestPostProcessors (para MockMvc):
+    // mockMvc.perform(delete("/api/admin/users")
+    //     .with(user("admin").roles("ADMIN")))
+    //     .andExpect(status().isOk());
+
+    // NOTA: @WithMockUser funciona com @PreAuthorize porque o Spring
+    // AOP intercepta a chamada e verifica o SecurityContext.
+    // Se @EnableMethodSecurity não estiver ativo, nenhuma exception é lançada
+    // mesmo sem role — cuidado com testes que "passam" por razão errada.`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -1655,6 +2944,123 @@ public JwtAuthenticationConverter jwtAuthenticationConverter() {
           { title: "Spring Security - OAuth2 Resource Server JWT", url: "https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html" },
           { title: "Baeldung - OAuth2 Resource Server", url: "https://www.baeldung.com/spring-security-oauth-resource-server" },
           { title: "Baeldung - Map Authorities from JWT", url: "https://www.baeldung.com/spring-security-map-authorities-jwt" }
+        ],
+        exercises: [
+          {
+            title: "Mapear claim 'roles' do JWT para ROLE_* authorities",
+            difficulty: "avançado",
+            description: `Seu Authorization Server emite JWTs com a claim customizada "roles": ["ADMIN", "EDITOR"]. O comportamento padrão do Spring Security lê a claim "scope" e adiciona prefixo "SCOPE_".
+
+Configure o JwtAuthenticationConverter para ler a claim "roles" e mapear para authorities com prefixo "ROLE_".`,
+            hint: "Use JwtGrantedAuthoritiesConverter e configure setAuthoritiesClaimName() e setAuthorityPrefix(). Registre via JwtAuthenticationConverter.",
+            solution: `@Configuration
+@EnableWebSecurity
+public class OAuth2SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/**").authenticated()
+                .anyRequest().denyAll()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter()))
+            );
+        return http.build();
+    }
+
+    @Bean
+    public JwtAuthenticationConverter jwtConverter() {
+        // PASSO 1: Configurar o converter de authorities
+        JwtGrantedAuthoritiesConverter authoritiesConverter =
+            new JwtGrantedAuthoritiesConverter();
+
+        // Ler da claim "roles" em vez de "scope"
+        authoritiesConverter.setAuthoritiesClaimName("roles");
+
+        // Adicionar prefixo "ROLE_" em vez de "SCOPE_"
+        authoritiesConverter.setAuthorityPrefix("ROLE_");
+
+        // PASSO 2: Criar o converter de autenticação
+        JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
+        jwtConverter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        return jwtConverter;
+    }
+}
+
+// JWT de exemplo:
+// {
+//   "sub": "alice",
+//   "roles": ["ADMIN", "EDITOR"],  ← lido aqui
+//   "exp": 1234567890
+// }
+// Resultado: GrantedAuthority("ROLE_ADMIN"), GrantedAuthority("ROLE_EDITOR")`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Validar claim customizado 'tenant_id' no JWT",
+            difficulty: "avançado",
+            description: `Seu JWT contém a claim "tenant_id". Você deve rejeitar tokens onde:
+- tenant_id está ausente
+- tenant_id não está na lista de tenants conhecidos: ["tenant-a", "tenant-b", "tenant-c"]
+
+Implemente isso como um OAuth2TokenValidator (não como filtro), para que integre com o sistema de erros do Spring Security OAuth2.`,
+            hint: "Implemente OAuth2TokenValidator<Jwt>. Use DelegatingOAuth2TokenValidator para compor com os validators padrão (issuer, expiry).",
+            solution: `// PASSO 1: Implementar o validator customizado
+public class TenantIdValidator implements OAuth2TokenValidator<Jwt> {
+
+    private static final Set<String> ALLOWED_TENANTS =
+        Set.of("tenant-a", "tenant-b", "tenant-c");
+
+    private final OAuth2Error error = new OAuth2Error(
+        "invalid_token",
+        "Token não pertence a um tenant conhecido",
+        "https://docs.example.com/errors/invalid-tenant"
+    );
+
+    @Override
+    public OAuth2TokenValidatorResult validate(Jwt token) {
+        String tenantId = token.getClaimAsString("tenant_id");
+
+        if (tenantId == null || tenantId.isBlank()) {
+            return OAuth2TokenValidatorResult.failure(error);
+        }
+
+        if (!ALLOWED_TENANTS.contains(tenantId)) {
+            return OAuth2TokenValidatorResult.failure(error);
+        }
+
+        return OAuth2TokenValidatorResult.success();
+    }
+}
+
+// PASSO 2: Compor com validators padrão e registrar no JwtDecoder
+@Bean
+public JwtDecoder jwtDecoder() {
+    NimbusJwtDecoder decoder = NimbusJwtDecoder
+        .withJwkSetUri("https://auth.example.com/.well-known/jwks.json")
+        .build();
+
+    // Compor: validator padrão (issuer + expiry) + validator customizado
+    OAuth2TokenValidator<Jwt> defaultValidator =
+        JwtValidators.createDefaultWithIssuer("https://auth.example.com");
+
+    OAuth2TokenValidator<Jwt> combinedValidator =
+        new DelegatingOAuth2TokenValidator<>(
+            defaultValidator,
+            new TenantIdValidator()
+        );
+
+    decoder.setJwtValidator(combinedValidator);
+    return decoder;
+}
+
+// Resultado: JWT sem tenant_id ou com tenant desconhecido → 401 Unauthorized
+// com mensagem de erro estruturada no header WWW-Authenticate`,
+            solutionLanguage: "java"
+          }
         ]
       },
       {
@@ -1951,6 +3357,68 @@ public class SecurityAuditListener {
             e.getAuthentication().get().getName());
     }
 }`,
+            solutionLanguage: "java"
+          },
+          {
+            title: "Detectar misconfigurações comuns de segurança",
+            difficulty: "avançado",
+            description: `Uma revisão de código revela 4 problemas:
+
+(a) @PreAuthorize("ROLE_ADMIN")
+(b) .anyRequest().permitAll() definido APÓS .anyRequest().denyAll()
+(c) Filtro customizado adicionado com http.addFilter() sem posição
+(d) .csrf(csrf -> csrf.disable()) aplicado globalmente, incluindo endpoints com formulário HTML
+
+Para cada caso: explique o modo de falha exato e mostre a correção correta.`,
+            hint: "Cada problema tem um comportamento silencioso mas perigoso: (a) sempre permite, (b) nunca alcançado, (c) contexto pode ser null, (d) exposição a CSRF em formulários.",
+            solution: `// ──────────────────────────────────────────────────
+// (a) @PreAuthorize("ROLE_ADMIN") — expressão avaliada como literal String
+
+// FALHA: SpEL avalia "ROLE_ADMIN" como uma String não vazia → sempre true!
+// Qualquer utilizador autenticado executa o método.
+@PreAuthorize("ROLE_ADMIN")  // ❌ ERRADO — sempre true
+public void adminOperation() { }
+
+// ✅ CORRETO:
+@PreAuthorize("hasRole('ADMIN')")  // ou hasAuthority('ROLE_ADMIN')
+public void adminOperation() { }
+
+// ──────────────────────────────────────────────────
+// (b) Regras não alcançáveis — primeira correspondência vence
+
+http.authorizeHttpRequests(authz -> authz
+    .anyRequest().denyAll()     // ← avaliado primeiro: bloqueia TUDO
+    .anyRequest().permitAll()   // ❌ nunca alcançado
+);
+
+// ✅ CORRETO: regras específicas primeiro, fallback por último
+http.authorizeHttpRequests(authz -> authz
+    .requestMatchers("/api/public/**").permitAll()
+    .anyRequest().denyAll()  // fallback seguro
+);
+
+// ──────────────────────────────────────────────────
+// (c) Filtro sem posição — executa em local indefinido
+
+http.addFilter(new MyAuditFilter()); // ❌ sem posição definida
+
+// FALHA: Pode executar antes do SecurityContextHolderFilter.
+// Authentication = null quando MyAuditFilter tenta ler o SecurityContext.
+
+// ✅ CORRETO: posicionar explicitamente
+http.addFilterAfter(new MyAuditFilter(), SecurityContextHolderFilter.class);
+
+// ──────────────────────────────────────────────────
+// (d) CSRF desabilitado globalmente — endpoints HTML expostos
+
+http.csrf(csrf -> csrf.disable()); // ❌ global — formulários HTML desprotegidos
+
+// FALHA: Formulários HTML em /web/** ficam vulneráveis a CSRF attacks.
+
+// ✅ CORRETO: Desabilitar CSRF apenas para APIs, manter para MVC
+// Use duas SecurityFilterChain separadas:
+// Cadeia 1 (/api/**): CSRF desabilitado, JWT, stateless
+// Cadeia 2 (/web/**): CSRF habilitado, formulário, sessão`,
             solutionLanguage: "java"
           }
         ]
