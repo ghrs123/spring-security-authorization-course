@@ -1767,6 +1767,150 @@ public class ProductionSecurityConfig {
           { title: "OWASP Authorization Cheat Sheet", url: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html" },
           { title: "Spring Security FAQ", url: "https://docs.spring.io/spring-security/reference/servlet/appendix/faq.html" },
           { title: "Vídeo Devoxx - Authorization in Spring Security", url: "https://www.youtube.com/watch?v=LGlyLmxjutI" }
+        ],
+        quiz: [
+          {
+            question: "Qual regra de autorização é mais segura como fallback: anyRequest().authenticated() ou anyRequest().denyAll()?",
+            options: [
+              "anyRequest().authenticated() — garante que todos os utilizadores têm sessão",
+              "anyRequest().denyAll() — bloqueia tudo que não foi explicitamente permitido",
+              "São equivalentes em segurança",
+              "anyRequest().permitAll() — é mais flexível para o desenvolvimento"
+            ],
+            correctIndex: 1,
+            explanation: "anyRequest().denyAll() é a postura mais segura: novos endpoints adicionados ao código são bloqueados por defeito até que uma regra explícita seja adicionada. Com authenticated(), um endpoint novo esquecido fica acessível a qualquer utilizador autenticado — potencialmente indesejado."
+          },
+          {
+            question: "O que é o Princípio de Defense in Depth na segurança de aplicações?",
+            options: [
+              "Usar apenas uma camada de segurança muito forte em vez de múltiplas fracas",
+              "Aplicar múltiplas camadas de segurança independentes, de forma que a falha de uma não comprometa o sistema",
+              "Defender apenas os endpoints mais críticos e deixar os outros sem proteção",
+              "Encriptar todos os dados em profundidade (múltiplos algoritmos)"
+            ],
+            correctIndex: 1,
+            explanation: "Defense in Depth: múltiplas camadas independentes de proteção. No contexto Spring Security: autenticação + autorização a nível de URL + autorização a nível de método + validação de dados + logging/auditoria. Se uma camada falhar, as outras continuam a proteger."
+          },
+          {
+            question: "Qual é a vantagem de usar JWTs para autorização em microsserviços comparado com sessões centralizadas?",
+            options: [
+              "JWTs são mais seguros porque são assinados criptograficamente",
+              "JWTs permitem que cada microsserviço valide autorização localmente sem consultar um serviço central a cada pedido",
+              "JWTs suportam mais informação do utilizador do que sessões",
+              "JWTs eliminam a necessidade de HTTPS"
+            ],
+            correctIndex: 1,
+            explanation: "Com sessões centralizadas, cada microsserviço teria que consultar um serviço de sessão a cada pedido — gargalo de performance e ponto único de falha. Com JWTs auto-contidos e assinados, cada serviço valida localmente usando a chave pública do Authorization Server — sem chamadas externas."
+          }
+        ],
+        exercises: [
+          {
+            title: "Configuração completa de produção para API REST",
+            difficulty: "avançado",
+            description: `Configure uma SecurityFilterChain completa para produção com todos os elementos essenciais:
+
+1. CSRF desabilitado (API stateless)
+2. CORS configurado para origens específicas (https://app.example.com)
+3. Sessão stateless
+4. Headers de segurança (CSP, X-Frame-Options)
+5. OAuth2 Resource Server com JWT
+6. Regras de autorização: /actuator/health público, /api/admin/** exige ROLE_ADMIN, /api/** exige autenticação, anyRequest denyAll
+7. Tratamento de exceções JSON para 401 e 403
+8. Auditoria de eventos de segurança com @EventListener`,
+            hint: "Combine .headers(), .cors(), .csrf(), .sessionManagement(), .oauth2ResourceServer(), .authorizeHttpRequests() e .exceptionHandling() numa única SecurityFilterChain.",
+            solution: `@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class ProductionSecurityConfig {
+
+    @Bean
+    public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .headers(headers -> headers
+                .contentSecurityPolicy(csp ->
+                    csp.policyDirectives("default-src 'self'; frame-ancestors 'none'"))
+                .frameOptions(frame -> frame.deny())
+                .xssProtection(xss -> xss.disable()) // CSP é mais eficaz
+            )
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/**").authenticated()
+                .anyRequest().denyAll() // seguro por defeito
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter()))
+            )
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((req, res, e) -> {
+                    res.setContentType("application/json;charset=UTF-8");
+                    res.setStatus(401);
+                    res.getWriter().write(
+                        "{\"error\":\"unauthorized\",\"message\":\"Token inválido ou ausente\"}"
+                    );
+                })
+                .accessDeniedHandler((req, res, e) -> {
+                    res.setContentType("application/json;charset=UTF-8");
+                    res.setStatus(403);
+                    res.getWriter().write(
+                        "{\"error\":\"forbidden\",\"message\":\"Sem permissão para este recurso\"}"
+                    );
+                })
+            );
+        return http.build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("https://app.example.com"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
+    }
+
+    @Bean
+    public JwtAuthenticationConverter jwtConverter() {
+        JwtGrantedAuthoritiesConverter authConverter = new JwtGrantedAuthoritiesConverter();
+        authConverter.setAuthoritiesClaimName("roles");
+        authConverter.setAuthorityPrefix("ROLE_");
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authConverter);
+        return converter;
+    }
+}
+
+// Auditoria de eventos
+@Component
+public class SecurityAuditListener {
+    private static final Logger auditLog = LoggerFactory.getLogger("SECURITY_AUDIT");
+
+    @EventListener
+    public void onSuccess(AuthenticationSuccessEvent e) {
+        auditLog.info("LOGIN_SUCCESS | user={}", e.getAuthentication().getName());
+    }
+
+    @EventListener
+    public void onFailure(AbstractAuthenticationFailureEvent e) {
+        auditLog.warn("LOGIN_FAILURE | user={} | reason={}",
+            e.getAuthentication().getName(), e.getException().getMessage());
+    }
+
+    @EventListener
+    public void onDenied(AuthorizationDeniedEvent<?> e) {
+        auditLog.warn("ACCESS_DENIED | user={}",
+            e.getAuthentication().get().getName());
+    }
+}`,
+            solutionLanguage: "java"
+          }
         ]
       }
     ]
