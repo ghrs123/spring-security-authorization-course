@@ -116,7 +116,9 @@ function MermaidDiagramBlock({ diagram, diagramId, accentColor }: { diagram: Top
         <GitBranch size={12} className={accentColor === "emerald" ? "text-primary/70" : "text-accent/70"} />
         <span className="font-mono text-xs text-muted-foreground">{diagram.title}</span>
       </div>
-      <div ref={containerRef} className="p-4 flex justify-center [&>svg]:max-w-full [&>svg]:h-auto" />
+      <div className="p-4 overflow-x-auto overflow-y-hidden min-h-[120px]">
+        <div ref={containerRef} className="flex justify-center [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:min-w-0" />
+      </div>
       {diagram.explanation && (
         <div className="px-4 py-3 bg-[#161b22] border-t border-border/20">
           <p className="text-xs text-muted-foreground leading-relaxed">
@@ -516,6 +518,7 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
   const hasOutcomes = topic.outcomes && topic.outcomes.length > 0;
   const hasWhenToUse = topic.whenToUse && topic.whenToUse.length > 0;
   const hasAntiPatterns = topic.antiPatterns && topic.antiPatterns.length > 0;
+  const hasDiagrams = topic.diagrams && topic.diagrams.length > 0;
 
   return (
     <div
@@ -548,7 +551,7 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
             </div>
 
             {/* Feature badges */}
-            {(hasQuiz || hasExercises || hasOutcomes || hasWhenToUse || hasAntiPatterns) && (
+            {(hasQuiz || hasExercises || hasOutcomes || hasWhenToUse || hasAntiPatterns || hasDiagrams) && (
               <div className="flex items-center gap-3 mb-4">
                 {hasWhenToUse && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
@@ -558,6 +561,11 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
                 {hasOutcomes && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
                     <Target size={9} /> {topic.outcomes!.length} objetivos
+                  </span>
+                )}
+                {hasDiagrams && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
+                    <GitBranch size={9} /> {topic.diagrams!.length} diagrama{topic.diagrams!.length > 1 ? "s" : ""}
                   </span>
                 )}
                 {hasQuiz && (

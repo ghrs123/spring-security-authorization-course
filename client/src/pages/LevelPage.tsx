@@ -123,6 +123,13 @@ export default function LevelPage() {
           <p className="text-muted-foreground text-lg leading-relaxed max-w-3xl">
             {level.description}
           </p>
+          {level.id === 4 && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              <a href="#capstone-rubric" className={isAmber ? "text-accent hover:underline" : "text-primary hover:underline"}>
+                Ver rubrica de avaliação →
+              </a>
+            </p>
+          )}
           <div className="mt-6 flex items-center gap-4 text-sm text-muted-foreground">
             <span className={`font-mono px-3 py-1 rounded border ${
               isAmber ? "border-accent/30 text-accent" : "border-primary/30 text-primary"
@@ -165,7 +172,7 @@ export default function LevelPage() {
 
       {/* ─── Capstone: Rubrica de avaliação ─── */}
       {level.id === 4 && (
-        <section className="py-10 pb-20">
+        <section id="capstone-rubric" className="py-10 pb-20 scroll-mt-8">
           <div className="container max-w-6xl mx-auto px-4">
             <CapstoneScoring
               rubric={capstoneRubric}
