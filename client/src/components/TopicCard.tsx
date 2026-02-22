@@ -9,6 +9,7 @@ import {
   BookOpen, Code2, ChevronDown, ChevronUp, AlertTriangle,
   ExternalLink, Copy, Check, Terminal, FileText, Brain,
   Dumbbell, ChevronRight, Eye, EyeOff, Trophy, XCircle, CheckCircle2,
+  Target,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { Highlight, themes } from "prism-react-renderer";
@@ -87,6 +88,44 @@ function CodeBlock({ example, accentColor }: { example: CodeExample; accentColor
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function OutcomesSection({ outcomes, accentColor }: { outcomes: string[]; accentColor: string }) {
+  const accent = accentColor === "emerald" ? "text-primary" : "text-accent";
+  const accentBg = accentColor === "emerald"
+    ? "bg-primary/5 border-primary/15"
+    : "bg-accent/5 border-accent/15";
+
+  return (
+    <div className="px-6 py-6 border-t border-border/20">
+      <div className="flex items-center gap-2 mb-5">
+        <Target size={14} className={accentColor === "emerald" ? "text-primary" : "text-accent"} />
+        <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Objetivos de Aprendizagem ({outcomes.length})
+        </h4>
+      </div>
+      <ol className="space-y-3">
+        {outcomes.map((outcome, i) => {
+          const match = outcome.match(/^([A-Z]+)\s([\s\S]*)/);
+          const verb = match ? match[1] : null;
+          const body = match ? match[2] : outcome;
+          return (
+            <li key={i} className={`flex items-start gap-3 p-3 rounded-lg border ${accentBg}`}>
+              <span className={`font-mono text-[10px] font-bold shrink-0 mt-0.5 ${accent}`}>
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <p className="text-sm text-foreground/80 leading-relaxed">
+                {verb && (
+                  <strong className={`font-mono font-bold mr-1 ${accent}`}>{verb}</strong>
+                )}
+                {body}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -369,6 +408,7 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
 
   const hasQuiz = topic.quiz && topic.quiz.length > 0;
   const hasExercises = topic.exercises && topic.exercises.length > 0;
+  const hasOutcomes = topic.outcomes && topic.outcomes.length > 0;
 
   return (
     <div
@@ -401,8 +441,13 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
             </div>
 
             {/* Feature badges */}
-            {(hasQuiz || hasExercises) && (
+            {(hasQuiz || hasExercises || hasOutcomes) && (
               <div className="flex items-center gap-3 mb-4">
+                {hasOutcomes && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
+                    <Target size={9} /> {topic.outcomes!.length} objetivos
+                  </span>
+                )}
                 {hasQuiz && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
                     <Brain size={9} /> {topic.quiz!.length} perguntas
@@ -448,6 +493,11 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
               {renderContent(topic.content, accentColor)}
             </div>
           </div>
+
+          {/* Outcomes */}
+          {hasOutcomes && (
+            <OutcomesSection outcomes={topic.outcomes!} accentColor={accentColor} />
+          )}
 
           {/* Code Examples */}
           {topic.codeExamples.length > 0 && (

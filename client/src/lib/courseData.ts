@@ -6,6 +6,22 @@
  * Based on: "Authorization in Spring Security" by Daniel Garnier-Moiroux (Devoxx 2024)
  */
 
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface Exercise {
+  title: string;
+  difficulty: "iniciante" | "intermediário" | "avançado";
+  description: string;
+  hint?: string;
+  solution: string;
+  solutionLanguage: string;
+}
+
 export interface CodeExample {
   title: string;
   language: string;
@@ -22,6 +38,9 @@ export interface Topic {
   codeExamples: CodeExample[];
   warnings: string[];
   references: { title: string; url: string }[];
+  quiz?: QuizQuestion[];
+  exercises?: Exercise[];
+  outcomes?: string[];
 }
 
 export interface Level {
@@ -47,6 +66,29 @@ export const levels: Level[] = [
     image: "https://private-us-east-1.manuscdn.com/sessionFile/N5xwokNkCjHpjdv3yPIPRp/sandbox/4nY5BjNO4iG97lnmQVBkw0-img-2_1771581045000_na1fn_bGV2ZWwxLWZ1bmRhbWVudGFscw.png?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvTjV4d29rTmtDakhwamR2M3lQSVBScC9zYW5kYm94LzRuWTVCak5PNGlHOTdsbm1RVkJrdzAtaW1nLTJfMTc3MTU4MTA0NTAwMF9uYTFmbl9iR1YyWld3eExXWjFibVJoYldWdWRHRnNjdy5wbmc~eC1vc3MtcHJvY2Vzcz1pbWFnZS9yZXNpemUsd18xOTIwLGhfMTkyMC9mb3JtYXQsd2VicC9xdWFsaXR5LHFfODAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTg3NjE2MDB9fX1dfQ__&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=UQeU8XUmZARZmr~DeXL5zLBPvmNI8yLfpmXLj85tPMXVDmd2ji~1ynUZVGK3naKfiYkoBexMk5t7KVbyqB6t1ph3CQks8m508p7eeTZsVKl8Dp87Pf~7IgkNUfEAKk09SRHpyaQXS11Fm72SHKLXo4z05YjCXh6M637MFsta1vQjPIPg5gvgsQREzjgfE7nGDgdwTHKV3ZBQ1M~oZbmbqps7zaWseE81kkiIp70S84nnDLgF~qyEO8ExK7k1~egI3WtF23O1bXdEfss7heSQmuildKV7hOTbvLE8rZ68TnYEHCoD5jMO8GJ~Shs3E-jSoq3SsF0zelK~cHRItIQnkg__",
     accentColor: "emerald",
     topics: [
+      {
+        id: "learning-outcomes",
+        title: "Objetivos de Aprendizagem",
+        description: "O que você será capaz de projetar, implementar, depurar e analisar ao concluir este curso.",
+        content: "Este curso aborda a autorização no Spring Security de forma progressiva — desde a configuração da SecurityFilterChain até autorização a nível de método com SpEL, OAuth2 Resource Servers e auditoria de acesso em microsserviços. Os objetivos abaixo definem competências mensuráveis aplicáveis diretamente em sistemas de backend em produção.",
+        concepts: ["DESIGN", "IMPLEMENT", "DEBUG", "ANALYZE", "AuthorizationManager", "Spring Security 6"],
+        codeExamples: [],
+        warnings: [],
+        references: [
+          {
+            title: "Authorization in Spring Security — Daniel Garnier-Moiroux, Devoxx 2024",
+            url: "https://www.youtube.com/watch?v=LGlyLmxjutI"
+          }
+        ],
+        outcomes: [
+          "DESIGN a multi-layered authorization architecture combining SecurityFilterChain HTTP rules and method-level @PreAuthorize annotations — choosing the correct enforcement layer for each access control rule.",
+          "IMPLEMENT role-based and permission-based access control using GrantedAuthority, UserDetailsService, and custom AuthorizationManager beans that evaluate domain-object ownership at runtime.",
+          "DEBUG authorization failures end-to-end by reading AccessDeniedException stack traces, enabling Spring Security DEBUG logs, and tracing how FilterSecurityInterceptor and AuthorizationFilter delegate decisions.",
+          "IMPLEMENT OAuth2 Resource Server JWT validation including custom claims extraction, authority mapping via JwtGrantedAuthoritiesConverter, and stateless SessionCreationPolicy for REST APIs.",
+          "APPLY SpEL expressions in @PreAuthorize and @PostFilter annotations to enforce fine-grained access rules that reference the authenticated principal and properties of domain objects.",
+          "ANALYZE authorization event flows in production by implementing AuthorizationEventPublisher listeners, auditing AuthorizationDeniedEvent entries, and designing an observability strategy for security incidents."
+        ]
+      },
       {
         id: "1-1",
         title: "Introdução ao Spring Security",
