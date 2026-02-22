@@ -2477,6 +2477,274 @@ public class DocumentService {
   },
   {
     id: 4,
+    slug: "capstone",
+    title: "Capstone Project",
+    subtitle: "Projeto Final",
+    description: "Arquitetura de autorização para SaaS multi-tenant: Global Admin, Tenant Admin, Utilizador, propriedade de recursos e permissões. Integre SecurityFilterChain, autorização a nível de método e AuthorizationManager num projeto de síntese.",
+    image: "https://private-us-east-1.manuscdn.com/sessionFile/N5xwokNkCjHpjdv3yPIPRp/sandbox/4nY5BjNO4iG97lnmQVBkw0-img-4_1771581051000_na1fn_bGV2ZWwzLWludGVybmFscw.png?x-oss-process=image/resize,w_1920,h_1920/format,webp/quality,q_80&Expires=1798761600&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvTjV4d29rTmtDakhwamR2M3lQSVBScC9zYW5kYm94LzRuWTVCak5PNGlHOTdsbm1RVkJrdzAtaW1nLTRfMTc3MTU4MTA1MTAwMF9uYTFmbl9iR1YyWld3ekxXbHVkR1Z5Ym1Gc2N3LnBuZz94LW9zcy1wcm9jZXNzPWltYWdlL3Jlc2l6ZSx3XzE5MjAsaF8xOTIwL2Zvcm1hdCx3ZWJwL3F1YWxpdHkscV84MCIsIkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc5ODc2MTYwMH19fV19&Key-Pair-Id=K2HSFNDJXOU9YS&Signature=SUwLwKXbcVaVK-s2rz4y5iwnzZqnqTI8~GsazU~2rG5czq12bwV2aWQ~eu98lr1QyC0UVh7r6fVG7m-N2wNh9UpGKIGMyrYX10hUE26pCOwpGaANf1O2fSmOLuJijpRSv7wupf5sZli~uEHC0fEwLlU1L4FyzxRtD0XvJt2fSNhXkg2YNWCLTNkrjC8AJdooDoFs5Tbo3a~QSfQ4Xwsrkez4EpmlWk0dyb6nBRuPEFfJ8mv1dOmPEt4Ghh3WXVN3pdJp1Pt~BNQjxKsLejjuZYRSAfkazydYZRF32JldMcXoIqDhzXr-xOOvm7XBYgnTNykwJFMO4vHpvQMtp8TmPw__",
+    accentColor: "emerald",
+    topics: [
+      {
+        id: "4-1",
+        title: "Problema e Requisitos",
+        description: "Contexto SaaS multi-tenant, atores (Global Admin, Tenant Admin, Utilizador) e requisitos de propriedade e permissões.",
+        content: `Num cenário **SaaS multi-tenant**, a mesma aplicação serve vários inquilinos (tenants). Cada inquilino tem os seus próprios utilizadores, dados e configurações. A autorização deve garantir: (1) isolamento entre tenants; (2) papéis distintos — **Global Admin** (administra a plataforma), **Tenant Admin** (administra um tenant), **Utilizador** (usa recursos do seu tenant); (3) **propriedade** — um recurso pertence a um tenant e, opcionalmente, a um utilizador; (4) permissões granulares por recurso e por ação.
+
+**Requisitos funcionais típicos**
+
+- Global Admin: aceder a todos os tenants, criar/desativar tenants, ver métricas globais.
+- Tenant Admin: gerir utilizadores e papéis do seu tenant, ver dados agregados do tenant.
+- Utilizador: criar/editar/apagar apenas os seus recursos (ownership); listar apenas recursos do seu tenant.
+- Endpoints públicos (login, registo) e endpoints por tenant (API sob \`/api/tenant/{tenantId}/**\` ou contexto de tenant no token).
+
+**Requisitos não funcionais**
+
+- Isolamento estrito: um utilizador do tenant A nunca acede a dados do tenant B.
+- Fallback deny: qualquer rota ou método não explicitamente permitido deve ser negado.
+- Rastreabilidade: decisões de autorização devem ser auditáveis (quem, quando, que recurso).`,
+        concepts: ["SaaS multi-tenant", "Global Admin", "Tenant Admin", "Utilizador", "Propriedade", "Isolamento por tenant", "Requisitos de autorização"],
+        codeExamples: [
+          {
+            title: "Esboço de requisitos por ator",
+            language: "text",
+            code: `Global Admin:
+  - GET/POST /api/admin/tenants
+  - GET /api/admin/tenants/{id}/metrics
+  - hasAuthority("GLOBAL_ADMIN") ou hasRole("GLOBAL_ADMIN")
+
+Tenant Admin (tenant T):
+  - GET/POST /api/tenant/T/users
+  - GET /api/tenant/T/reports
+  - tenantId do token == T e hasAuthority("TENANT_ADMIN")
+
+User (tenant T):
+  - GET/POST /api/tenant/T/documents (apenas os seus)
+  - #resource.ownerId == authentication.principal.id`,
+            explanation: "Resumo de quem pode aceder a quê. A implementação concretiza isto na SecurityFilterChain, em @PreAuthorize e em AuthorizationManager."
+          }
+        ],
+        warnings: [
+          "Não confundir Tenant Admin com Global Admin: o primeiro está limitado a um tenant; o segundo à plataforma inteira.",
+          "Definir sempre o que acontece quando tenantId está ausente ou inválido no token ou no path (deve resultar em 403)."
+        ],
+        references: [
+          { title: "Documentação Spring Security — Authorization", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/index.html" },
+          { title: "Authorization in Spring Security — Devoxx 2024", url: "https://www.youtube.com/watch?v=LGlyLmxjutI" }
+        ],
+        exercises: [
+          {
+            title: "Listar requisitos de autorização para um endpoint",
+            difficulty: "iniciante",
+            description: "Para o endpoint GET /api/tenant/{tenantId}/documents/{id}, escreva em português os requisitos de autorização para Global Admin, Tenant Admin e Utilizador (incluindo ownership).",
+            hint: "Considere: quem pode ver qualquer documento do tenant? Quem pode ver apenas os seus?",
+            solution: "Global Admin: pode ver qualquer documento de qualquer tenant. Tenant Admin: pode ver qualquer documento do seu tenant (tenantId do token == tenantId do path). Utilizador: pode ver apenas documentos do seu tenant e onde document.ownerId == seu userId.",
+            solutionLanguage: "text"
+          }
+        ],
+        whenToUse: [
+          "✅ USE este tipo de análise quando desenhar um novo módulo ou API multi-tenant.",
+          "❌ EVITE implementar regras na aplicação sem documentar primeiro os requisitos por ator."
+        ],
+        antiPatterns: [
+          {
+            title: "Tratar todos os utilizadores autenticados como iguais",
+            problem: "Não distinguir Global Admin, Tenant Admin e Utilizador; todos recebem o mesmo conjunto de authorities.",
+            danger: "Um utilizador normal pode aceder a endpoints de administração de tenant ou da plataforma.",
+            fix: "Definir papéis e permissões por ator e mapeá-los em GrantedAuthority (ou atributos no token); aplicar regras por endpoint e por método."
+          }
+        ]
+      },
+      {
+        id: "4-2",
+        title: "Desenho do Modelo de Autorização",
+        description: "RBAC, permissões e propriedade; papéis por tenant; mapeamento para conceitos do Spring Security.",
+        content: `O **modelo de autorização** deve combinar **RBAC** (papéis por tenant e globais), **permissões** (ações sobre recursos) e **propriedade** (ownership). No Spring Security, isto traduz-se em: \`GrantedAuthority\` para papéis (ROLE_TENANT_ADMIN, ROLE_GLOBAL_ADMIN) e opcionalmente para permissões (DOCUMENT_READ, DOCUMENT_WRITE); um principal que carrega \`tenantId\` e \`userId\`; e regras que verificam tenant + role + ownership.
+
+**Papéis por tenant**
+
+- Global: \`ROLE_GLOBAL_ADMIN\` (único, não associado a um tenant).
+- Por tenant: \`ROLE_TENANT_ADMIN\`, \`ROLE_USER\`. O principal deve incluir o \`tenantId\` (ex.: do JWT ou da sessão) para que as regras comparem \"tenant do pedido\" com \"tenant do utilizador\".
+
+**Propriedade**
+
+- Recursos com \`ownerId\` (e \`tenantId\`): apenas o dono ou um Tenant/Global Admin do mesmo tenant podem aceder. Implementar com \`@PreAuthorize\` (SpEL) ou \`AuthorizationManager\` que consulte o recurso e compare com \`authentication.principal\`.`,
+        concepts: ["RBAC multi-tenant", "GrantedAuthority", "ROLE_GLOBAL_ADMIN", "ROLE_TENANT_ADMIN", "Propriedade (ownership)", "tenantId no principal"],
+        codeExamples: [
+          {
+            title: "Principal com tenantId e userId",
+            language: "java",
+            code: `public class TenantUserPrincipal {
+    private final String username;
+    private final Long userId;
+    private final String tenantId;
+    private final Collection<? extends GrantedAuthority> authorities;
+
+    // getters ...
+}
+
+// No JwtAuthenticationConverter ou UserDetailsService:
+// authorities = [ROLE_TENANT_ADMIN] ou [ROLE_USER], tenantId e userId extraídos do token/sessão.`,
+            explanation: "O principal deve expor tenantId e userId para que SecurityFilterChain, @PreAuthorize e AuthorizationManager possam decidir com base em tenant e ownership."
+          }
+        ],
+        warnings: [
+          "Garantir que tenantId e userId vêm de fonte confiável (token assinado ou sessão server-side), nunca apenas do path ou do body.",
+          "Evitar misturar ROLE_ globais com lógica por tenant sem validar sempre o tenant no mesmo pedido."
+        ],
+        references: [
+          { title: "Spring Security — GrantedAuthority", url: "https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/user-details.html" }
+        ],
+        exercises: [
+          {
+            title: "Definir authorities para os três atores",
+            difficulty: "intermediário",
+            description: "Proponha uma lista de GrantedAuthority (e como as atribui) para Global Admin, Tenant Admin e Utilizador. Inclua como obter tenantId no principal.",
+            hint: "Use ROLE_ para papéis; pode usar authorities adicionais para permissões finas (ex.: DOCUMENT_DELETE).",
+            solution: "Global Admin: [ROLE_GLOBAL_ADMIN]. Tenant Admin: [ROLE_TENANT_ADMIN] + tenantId no principal. User: [ROLE_USER] + tenantId + userId. Atribuir no JwtGrantedAuthoritiesConverter ou no UserDetailsService a partir do token ou da base de dados.",
+            solutionLanguage: "text"
+          }
+        ],
+        whenToUse: [
+          "✅ USE RBAC por tenant quando os papéis forem estáveis e bem definidos.",
+          "✅ USE ownership quando cada recurso tiver um dono e a regra for \"dono ou admin do tenant\"."
+        ],
+        antiPatterns: [
+          {
+            title: "Confiar no tenantId do path sem validar contra o token",
+            problem: "A decisão de acesso usa apenas o tenantId da URL, sem verificar se o utilizador pertence a esse tenant.",
+            danger: "Um utilizador do tenant A pode alterar o path para tenant B e aceder a dados de outro tenant.",
+            fix: "Sempre comparar tenantId do principal (token/sessão) com o tenantId do recurso ou do path; negar se forem diferentes."
+          }
+        ]
+      },
+      {
+        id: "4-3",
+        title: "Plano de Implementação",
+        description: "Camada HTTP (SecurityFilterChain), segurança de método (@PreAuthorize) e AuthorizationManager; onde aplicar cada um.",
+        content: `**Camada HTTP (SecurityFilterChain)** — Use para rotas que dependem apenas de autenticação e papel, sem inspecionar o corpo ou parâmetros do recurso. Ex.: \`/api/admin/**\` → hasRole("GLOBAL_ADMIN"); \`/api/tenant/**\` → authenticated() e, em seguida, a lógica de tenant é aplicada no controller/serviço ou num filtro que valida o tenant do token contra o path.
+
+**Segurança a nível de método (@PreAuthorize)** — Use para regras que dependem do principal e de parâmetros do método (ex.: \`#tenantId == authentication.principal.tenantId\`, \`#resourceId\` e ownership). Ideal para serviços chamados por controllers; evite SpEL muito longa — extraia para um bean (ex.: \`@tenantAuthz.canAccess(authentication, #tenantId)\`).
+
+**AuthorizationManager** — Use quando a decisão depender de objetos complexos (ex.: \`RequestAuthorizationContext\` com URI e parâmetros) ou de lógica reutilizável que não cabe numa anotação. Ex.: um \`AuthorizationManager<RequestAuthorizationContext>\` que verifica se o tenant do path corresponde ao do token.`,
+        concepts: ["SecurityFilterChain", "requestMatchers", "@PreAuthorize", "AuthorizationManager", "RequestAuthorizationContext", "Camadas de autorização"],
+        codeExamples: [
+          {
+            title: "SecurityFilterChain para admin e tenant",
+            language: "java",
+            code: `http.authorizeHttpRequests(authz -> authz
+    .requestMatchers("/api/admin/**").hasRole("GLOBAL_ADMIN")
+    .requestMatchers("/api/tenant/**").authenticated()
+    .requestMatchers("/api/public/**").permitAll()
+    .anyRequest().denyAll()
+);`,
+            explanation: "Rotas administrativas globais exigem GLOBAL_ADMIN; rotas por tenant exigem apenas autenticação; o resto é negado. A validação de tenant e ownership deve ser feita nos serviços com @PreAuthorize ou AuthorizationManager."
+          },
+          {
+            title: "@PreAuthorize com tenant e ownership",
+            language: "java",
+            code: `@PreAuthorize("@tenantAuthz.isSameTenant(authentication, #tenantId) and (@tenantAuthz.isTenantAdmin(authentication) or #document.ownerId == authentication.principal.userId)")
+public Document getDocument(String tenantId, Long docId, Document document) {
+    return document;
+}`,
+            explanation: "Delegação para um bean tenantAuthz mantém a SpEL legível; verifica tenant e depois admin ou proprietário do recurso."
+          }
+        ],
+        warnings: [
+          "Terminar sempre com .anyRequest().denyAll() para que novas rotas não fiquem abertas por omissão.",
+          "Não duplicar lógica entre SecurityFilterChain e @PreAuthorize: use a cadeia para coarse-grained e o método para fine-grained."
+        ],
+        references: [
+          { title: "Spring Security — Authorize HTTP Requests", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/authorize-http-requests.html" },
+          { title: "Method Security — @PreAuthorize", url: "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html" }
+        ],
+        exercises: [
+          {
+            title: "Escolher a camada para uma regra",
+            difficulty: "intermediário",
+            description: "Para a regra \"apenas o dono do documento ou o Tenant Admin do mesmo tenant podem apagar o documento\", indique se usaria SecurityFilterChain, @PreAuthorize ou AuthorizationManager e porquê.",
+            hint: "A regra depende do recurso (documento) e do principal; não é só URL.",
+            solution: "Usar @PreAuthorize (ou AuthorizationManager a nível de método): a decisão depende do objeto documento (ownerId, tenantId) e do principal. A SecurityFilterChain não tem acesso ao documento.",
+            solutionLanguage: "text"
+          }
+        ],
+        whenToUse: [
+          "✅ USE SecurityFilterChain para regras por URL e papel (admin, público, autenticado).",
+          "✅ USE @PreAuthorize para regras que usam parâmetros do método e ownership.",
+          "✅ USE AuthorizationManager quando a lógica for partilhada ou demasiado complexa para SpEL."
+        ],
+        antiPatterns: [
+          {
+            title: "Apenas autorização HTTP sem verificação de ownership",
+            problem: "Proteger apenas por URL e role; métodos que devolvem ou alteram recursos não verificam se o recurso pertence ao tenant/utilizador.",
+            danger: "Um utilizador pode adivinhar IDs e aceder a recursos de outros (IDOR).",
+            fix: "Em todos os métodos que devolvem ou alteram um recurso por ID, verificar tenant e ownership com @PreAuthorize ou AuthorizationManager."
+          }
+        ]
+      },
+      {
+        id: "4-4",
+        title: "Estratégia de Testes e Armadilhas",
+        description: "Como testar autorização (unit e integração), Spring Security Test e erros comuns.",
+        content: `**Estratégia de testes** — (1) **Unitários**: testar beans de autorização (ex.: \`TenantAuthorizationService\`) com mocks do principal e do recurso; (2) **Integração**: usar \`@WithMockUser\`, \`@WithUserDetails\` ou \`SecurityMockMvcRequestPostProcessors\` para simular utilizadores e chamar controllers ou serviços; (3) testar sempre **cenários negativos**: 401 (não autenticado), 403 (sem permissão, tenant errado, não-owner).
+
+**Spring Security Test** — \`@WithMockUser(roles = "TENANT_ADMIN")\`, \`@WithUserDetails\` para carregar um UserDetails real, e \`mockMvc.perform(get(...).with(SecurityMockMvcRequestPostProcessors.jwt().claim("tenantId", "T1")))\` para JWT. Garantir que o principal usado nos testes tem tenantId e userId quando a aplicação os exige.
+
+**Armadilhas comuns** — (1) Testar só o caminho autorizado e esquecer 403/401; (2) usar mocks que não refletem as authorities reais; (3) não limpar SecurityContext entre testes (contaminação); (4) assumir que um teste que passa com um utilizador garante isolamento de tenant sem um teste explícito com outro tenant.`,
+        concepts: ["Spring Security Test", "@WithMockUser", "@WithUserDetails", "SecurityMockMvcRequestPostProcessors", "Testes de 401/403", "Isolamento de tenant em testes"],
+        codeExamples: [
+          {
+            title: "Teste de acesso negado por tenant",
+            language: "java",
+            code: `@Test
+@WithMockUser(username = "user1", authorities = "ROLE_USER")
+void getDocument_whenDifferentTenant_returns403() throws Exception {
+    // principal tem tenantId = "T1"; documento pertence a "T2"
+    mockMvc.perform(get("/api/tenant/T2/documents/1"))
+        .andExpect(status().isForbidden());
+}`,
+            explanation: "Garantir que um utilizador do tenant T1 não acede a recursos do tenant T2; o teste deve esperar 403."
+          }
+        ],
+        warnings: [
+          "Cada teste deve configurar explicitamente o principal (roles, tenantId) em vez de depender de estado global.",
+          "Incluir pelo menos um teste por regra que verifique o acesso negado (403), não apenas o sucesso (200)."
+        ],
+        references: [
+          { title: "Spring Security Test", url: "https://docs.spring.io/spring-security/reference/servlet/test/index.html" }
+        ],
+        exercises: [
+          {
+            title: "Escrever um teste que falhe sem a verificação de tenant",
+            difficulty: "intermediário",
+            description: "Escreva um teste de integração que chame GET /api/tenant/T2/documents/1 com um utilizador do tenant T1 e espere 403. Por que é que este teste é essencial?",
+            hint: "Sem este teste, uma alteração no código pode remover a verificação de tenant e os outros testes (com o mesmo tenant) continuam a passar.",
+            solution: "Usar @WithMockUser ou principal com tenantId T1; pedir recurso de T2; andExpect(status().isForbidden()). O teste é essencial para garantir que a verificação de tenant está presente e que um utilizador não acede a outro tenant.",
+            solutionLanguage: "java"
+          }
+        ],
+        whenToUse: [
+          "✅ USE testes de integração com utilizadores simulados para cada papel e para cenários cross-tenant.",
+          "❌ EVITE confiar apenas em testes que usam o mesmo tenant em todos os casos."
+        ],
+        antiPatterns: [
+          {
+            title: "Testar apenas o caminho autorizado",
+            problem: "Os testes cobrem apenas o caso em que o utilizador tem permissão; não há testes para 401/403.",
+            danger: "Regressões que abrem acesso indevido podem passar nos testes.",
+            fix: "Para cada endpoint protegido, adicionar testes com utilizador não autenticado (401), com papel errado ou tenant errado (403), e com ownership incorreto (403)."
+          },
+          {
+            title: "Principal de teste sem tenantId ou userId",
+            problem: "Os testes usam @WithMockUser com apenas roles, mas a aplicação espera principal com tenantId/userId.",
+            danger: "Os testes passam com um principal incompleto enquanto em produção o principal real tem mais campos; a lógica de tenant/ownership pode falhar em produção.",
+            fix: "Usar @WithUserDetails ou um custom UserDetailsService de teste que preencha tenantId e userId no principal, ou SecurityMockMvcRequestPostProcessors.jwt() com os claims corretos."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 5,
     slug: "design-testes",
     title: "Design, Testes e Produção",
     subtitle: "Arquiteto",
@@ -2485,7 +2753,7 @@ public class DocumentService {
     accentColor: "amber",
     topics: [
       {
-        id: "4-1",
+        id: "5-1",
         title: "Padrões de Design: RBAC, ABAC e ACL",
         description: "Compare os três principais padrões de controlo de acesso e saiba quando usar cada um.",
         content: `O controlo de acesso é um componente fundamental na segurança de qualquer aplicação. Define quem pode aceder a que recursos e que operações pode realizar. Existem três padrões principais de design de controlo de acesso, cada um com as suas vantagens e desvantagens.
@@ -2733,7 +3001,7 @@ public class DocumentService {
         ]
       },
       {
-        id: "4-2",
+        id: "5-2",
         title: "Testes de Autorização com Spring Security Test",
         description: "Domine as ferramentas de teste do Spring Security para garantir que as regras de autorização funcionam corretamente.",
         content: `O módulo **Spring Security Test** fornece suporte robusto para a escrita de testes unitários e de integração para aplicações protegidas com Spring Security. A sua principal finalidade é permitir que os desenvolvedores verifiquem as regras de autenticação e autorização de forma isolada e eficiente.
@@ -2992,7 +3260,7 @@ class UserServiceSecurityTest {
         ]
       },
       {
-        id: "4-3",
+        id: "5-3",
         title: "OAuth2 Resource Server e Autorização com JWT",
         description: "Configure um Resource Server para validar tokens JWT e implementar autorização baseada em claims.",
         content: `No ecossistema OAuth 2.0, um **Resource Server** é a aplicação que protege os recursos (APIs, dados). Ele recebe pedidos com um access token e decide se o acesso deve ser concedido. O Spring Security oferece suporte robusto para Resource Servers através do módulo \`spring-boot-starter-oauth2-resource-server\`.
@@ -3247,7 +3515,7 @@ public JwtDecoder jwtDecoder() {
         ]
       },
       {
-        id: "4-4",
+        id: "5-4",
         title: "Boas Práticas e Arquitetura em Produção",
         description: "Aprenda as melhores práticas para implementar autorização robusta e escalável em ambientes de produção.",
         content: `A implementação de autorização em ambientes de produção requer uma abordagem cuidadosa que vai além da simples configuração de regras de acesso. É necessário considerar performance, auditoria, escalabilidade e manutenibilidade.
