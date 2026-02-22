@@ -438,6 +438,26 @@ public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
           "❌ EVITE quando só precisa de regras de autorização diferentes por URL — uma única SecurityFilterChain com vários .requestMatchers() resolve sem overhead.",
           "❌ EVITE quando a separação duplica configuração sem diferença real no mecanismo de auth ou na estratégia de sessão.",
           "⚖ COMPROMISSO: Cada cadeia é independente — configuração partilhada (CORS, headers, tratamento de exceções) tem de ser duplicada ou extraída para um método comum. Erros de @Order aplicam silenciosamente a cadeia errada às requisições."
+        ],
+        diagrams: [
+          {
+            title: "Fluxo da Filter Chain (Servlet stack)",
+            type: "mermaid",
+            code: `flowchart TD
+  A[Client Request] --> B[Servlet Container]
+  B --> C[DelegatingFilterProxy]
+  C --> D[FilterChainProxy]
+  D --> E{Select SecurityFilterChain}
+  E -->|matches| F[SecurityFilterChain (ordered filters)]
+  E -->|no match| G[Continue without Spring Security chain]
+  F --> H[SecurityContextHolderFilter]
+  H --> I[Authentication Filters<br/>(e.g. BearerTokenAuthenticationFilter)]
+  I --> J[ExceptionTranslationFilter]
+  J --> K[AuthorizationFilter]
+  K --> L[Controller/Endpoint]
+  L --> M[Response]`,
+            explanation: "O pedido do cliente passa pelo container de servlet para o DelegatingFilterProxy; o FilterChainProxy escolhe a SecurityFilterChain que corresponde ao URL. A requisição percorre os filtros (SecurityContextHolderFilter, autenticação, ExceptionTranslationFilter, AuthorizationFilter) até ao controller e à resposta."
+          }
         ]
       },
       {
@@ -974,6 +994,30 @@ public class DocumentService {
           "❌ EVITE quando o método anotado é chamado dentro do mesmo bean (self-invocation) — o proxy AOP é contornado e @PreAuthorize é ignorado silenciosamente.",
           "❌ EVITE em métodos chamados em ciclos internos apertados — a avaliação SpEL adiciona overhead por invocação.",
           "⚖ COMPROMISSO: As regras de segurança ficam descentralizadas no código. Auditar todas as regras de acesso exige ler cada @Service, não só a SecurityFilterChain. Ferramentas ao nível HTTP (API gateways, reverse proxies) não veem regras a nível de método."
+        ],
+        diagrams: [
+          {
+            title: "Invocação de Method Security (AOP)",
+            type: "mermaid",
+            code: `sequenceDiagram
+  participant Caller as Controller/Service
+  participant Proxy as Spring AOP Proxy
+  participant MSI as MethodSecurityInterceptor
+  participant AM as AuthorizationManager
+  participant Target as Target Method
+
+  Caller->>Proxy: call securedMethod()
+  Proxy->>MSI: beforeInvocation()
+  MSI->>AM: check(Authentication, MethodInvocation)
+  AM-->>MSI: decision
+  alt granted
+    MSI->>Target: invoke()
+    Target-->>Caller: result
+  else denied
+    MSI-->>Caller: AccessDeniedException
+  end`,
+            explanation: "O caller invoca o método no proxy AOP; o MethodSecurityInterceptor executa antes da invocação e delega ao AuthorizationManager. Se a decisão for concedida, o método alvo é executado; caso contrário, é lançada AccessDeniedException."
+          }
         ]
       },
       {
@@ -1639,15 +1683,15 @@ public class AuthorizationConfig {
         ],
         diagrams: [
           {
-            title: "Ciclo de vida do SecurityContext",
+            title: "Ciclo de vida do SecurityContext (principal + thread)",
             type: "mermaid",
-            code: `flowchart LR
-  A[Requisição chega] --> B[SecurityContextPersistenceFilter]
-  B --> C[Carrega SecurityContext da sessão]
-  C --> D[SecurityContextHolder.setContext]
-  D --> E[Filtros / Controller]
-  E --> F[Limpa ou persiste contexto]`,
-            explanation: "O SecurityContextPersistenceFilter carrega o contexto da sessão HTTP no início do request e define-o no SecurityContextHolder; no fim, o contexto é limpo ou guardado na sessão."
+            code: `stateDiagram-v2
+  [*] --> EmptyContext: início do request
+  EmptyContext --> PopulatedContext: autenticação estabelecida
+  PopulatedContext --> UsedByApp: acedido por controllers/serviços
+  UsedByApp --> ClearedContext: fim do request / limpeza
+  ClearedContext --> [*]`,
+            explanation: "O SecurityContext começa vazio no início do request; após a autenticação fica populado e é usado pela aplicação; no fim do request o contexto é limpo (ou persistido na sessão). O ciclo está ligado à thread que processa o request."
           }
         ],
         exercises: [
@@ -2224,15 +2268,27 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         ],
         diagrams: [
           {
-            title: "Fluxo de decisão de autorização (AuthorizationFilter / AuthorizationManager)",
+            title: "Decisão de autorização (AuthorizationFilter + AuthorizationManager)",
             type: "mermaid",
-            code: `flowchart LR
-  Req[Requisição] --> AuthFilter[AuthorizationFilter]
-  AuthFilter --> AuthMgr[AuthorizationManager]
-  AuthMgr --> Check{Permitido?}
-  Check -->|Sim| Allow[Acesso permitido]
-  Check -->|Não| Deny[AccessDeniedException]`,
-            explanation: "O AuthorizationFilter obtém o Authentication do SecurityContextHolder, delega ao AuthorizationManager (regras de authorizeHttpRequests); se negado, lança AccessDeniedException e o ExceptionTranslationFilter trata (401/403)."
+            code: `sequenceDiagram
+  participant Req as HttpServletRequest
+  participant AF as AuthorizationFilter
+  participant AM as AuthorizationManager
+  participant Auth as Authentication
+  participant SM as SecurityContext
+  participant ADH as AccessDeniedHandler
+
+  Req->>AF: doFilter()
+  AF->>SM: getContext()
+  SM-->>AF: Authentication
+  AF->>AM: check(Auth, RequestAuthorizationContext)
+  AM-->>AF: AuthorizationDecision(granted/denied)
+  alt granted
+    AF->>AF: chain.doFilter()
+  else denied
+    AF->>ADH: handle(AccessDeniedException)
+  end`,
+            explanation: "O AuthorizationFilter obtém o Authentication do SecurityContext, delega ao AuthorizationManager com o contexto da requisição; se a decisão for concedida, a cadeia continua; se negada, o AccessDeniedHandler trata (ex.: 403)."
           }
         ],
         antiPatterns: [

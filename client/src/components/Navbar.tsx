@@ -49,6 +49,46 @@ export default function Navbar() {
               {level.subtitle}
             </Link>
           ))}
+          <Link
+            href="/curriculum"
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors no-underline ${
+              location === "/curriculum" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Curriculum
+          </Link>
+          <Link
+            href="/capstone"
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors no-underline ${
+              location === "/capstone" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Capstone
+          </Link>
+          <Link
+            href="/diagrams"
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors no-underline ${
+              location === "/diagrams" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Diagramas
+          </Link>
+          <Link
+            href="/exercises"
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors no-underline ${
+              location === "/exercises" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Exercícios
+          </Link>
+          <Link
+            href="/blog"
+            className={`px-3 py-2 rounded text-sm font-medium transition-colors no-underline ${
+              location === "/blog" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Blog
+          </Link>
         </div>
 
         {/* Mobile toggle */}
@@ -88,6 +128,51 @@ export default function Navbar() {
                 {level.title}
               </Link>
             ))}
+            <Link
+              href="/curriculum"
+              onClick={() => setMobileOpen(false)}
+              className={`px-3 py-3 rounded text-sm font-medium no-underline ${
+                location === "/curriculum" ? "text-primary bg-primary/10" : "text-muted-foreground"
+              }`}
+            >
+              Curriculum
+            </Link>
+            <Link
+              href="/capstone"
+              onClick={() => setMobileOpen(false)}
+              className={`px-3 py-3 rounded text-sm font-medium no-underline ${
+                location === "/capstone" ? "text-primary bg-primary/10" : "text-muted-foreground"
+              }`}
+            >
+              Capstone
+            </Link>
+            <Link
+              href="/diagrams"
+              onClick={() => setMobileOpen(false)}
+              className={`px-3 py-3 rounded text-sm font-medium no-underline ${
+                location === "/diagrams" ? "text-primary bg-primary/10" : "text-muted-foreground"
+              }`}
+            >
+              Diagramas
+            </Link>
+            <Link
+              href="/exercises"
+              onClick={() => setMobileOpen(false)}
+              className={`px-3 py-3 rounded text-sm font-medium no-underline ${
+                location === "/exercises" ? "text-primary bg-primary/10" : "text-muted-foreground"
+              }`}
+            >
+              Exercícios
+            </Link>
+            <Link
+              href="/blog"
+              onClick={() => setMobileOpen(false)}
+              className={`px-3 py-3 rounded text-sm font-medium no-underline ${
+                location === "/blog" ? "text-primary bg-primary/10" : "text-muted-foreground"
+              }`}
+            >
+              Blog
+            </Link>
           </div>
         </div>
       )}
