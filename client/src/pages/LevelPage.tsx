@@ -4,10 +4,12 @@
  * Dark navy bg, emerald wireframe lines, amber accents
  */
 
+import CapstoneScoring from "@/components/CapstoneScoring";
 import Navbar from "@/components/Navbar";
 import ProgressTracker from "@/components/ProgressTracker";
 import TopicCard from "@/components/TopicCard";
 import { levels } from "@/lib/courseData";
+import { capstoneRubric } from "@/lib/capstoneRubric";
 import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -160,6 +162,18 @@ export default function LevelPage() {
           </div>
         </div>
       </section>
+
+      {/* ─── Capstone: Rubrica de avaliação ─── */}
+      {level.id === 4 && (
+        <section className="py-10 pb-20">
+          <div className="container max-w-6xl mx-auto px-4">
+            <CapstoneScoring
+              rubric={capstoneRubric}
+              accentColor={level.accentColor as "emerald" | "amber"}
+            />
+          </div>
+        </section>
+      )}
 
       {/* ─── Level Navigation ─── */}
       <section className="py-12 border-t border-border/30">
