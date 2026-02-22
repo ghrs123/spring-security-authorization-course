@@ -4,12 +4,12 @@
  *            references, interactive QUIZ, and practical EXERCISES
  */
 
-import type { Topic, CodeExample, QuizQuestion, Exercise } from "@/lib/courseData";
+import type { Topic, CodeExample, QuizQuestion, Exercise, AntiPattern } from "@/lib/courseData";
 import {
   BookOpen, Code2, ChevronDown, ChevronUp, AlertTriangle,
   ExternalLink, Copy, Check, Terminal, FileText, Brain,
   Dumbbell, ChevronRight, Eye, EyeOff, Trophy, XCircle, CheckCircle2,
-  Target, Lightbulb,
+  Target, Lightbulb, ShieldX,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { Highlight, themes } from "prism-react-renderer";
@@ -153,6 +153,45 @@ function WhenToUseSection({ items, accentColor }: { items: string[]; accentColor
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function AntiPatternsSection({ patterns }: { patterns: AntiPattern[]; accentColor: string }) {
+  return (
+    <div className="px-6 py-6 border-t border-border/20">
+      <div className="flex items-center gap-2 mb-5">
+        <ShieldX size={14} className="text-red-400/80" />
+        <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Anti-Patterns Comuns ({patterns.length})
+        </h4>
+      </div>
+      <div className="space-y-4">
+        {patterns.map((p, i) => (
+          <div key={i} className="rounded-lg border border-red-500/15 overflow-hidden">
+            <div className="px-4 py-2.5 bg-red-500/5 border-b border-red-500/15 flex items-center gap-2">
+              <span className="font-mono text-[10px] text-red-400/60 font-bold shrink-0">
+                #{String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="font-mono text-xs font-semibold text-red-400/90">{p.title}</span>
+            </div>
+            <div className="px-4 py-3 space-y-2.5">
+              <div>
+                <span className="font-mono text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider">Problema</span>
+                <p className="mt-1 text-sm text-foreground/75 leading-relaxed">{p.problem}</p>
+              </div>
+              <div>
+                <span className="font-mono text-[10px] font-bold text-amber-400/60 uppercase tracking-wider">Perigo</span>
+                <p className="mt-1 text-sm text-amber-400/70 leading-relaxed">{p.danger}</p>
+              </div>
+              <div>
+                <span className="font-mono text-[10px] font-bold text-green-400/60 uppercase tracking-wider">Correção</span>
+                <p className="mt-1 text-sm text-green-400/70 leading-relaxed">{p.fix}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -437,6 +476,7 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
   const hasExercises = topic.exercises && topic.exercises.length > 0;
   const hasOutcomes = topic.outcomes && topic.outcomes.length > 0;
   const hasWhenToUse = topic.whenToUse && topic.whenToUse.length > 0;
+  const hasAntiPatterns = topic.antiPatterns && topic.antiPatterns.length > 0;
 
   return (
     <div
@@ -469,7 +509,7 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
             </div>
 
             {/* Feature badges */}
-            {(hasQuiz || hasExercises || hasOutcomes || hasWhenToUse) && (
+            {(hasQuiz || hasExercises || hasOutcomes || hasWhenToUse || hasAntiPatterns) && (
               <div className="flex items-center gap-3 mb-4">
                 {hasWhenToUse && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
@@ -489,6 +529,11 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
                 {hasExercises && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
                     <Dumbbell size={9} /> {topic.exercises!.length} exercício{topic.exercises!.length > 1 ? "s" : ""}
+                  </span>
+                )}
+                {hasAntiPatterns && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 border border-border/20 rounded px-2 py-0.5">
+                    <ShieldX size={9} /> {topic.antiPatterns!.length} anti-patterns
                   </span>
                 )}
               </div>
@@ -582,6 +627,11 @@ export default function TopicCard({ topic, index, accentColor }: TopicCardProps)
                 })}
               </div>
             </div>
+          )}
+
+          {/* Anti-Patterns */}
+          {hasAntiPatterns && (
+            <AntiPatternsSection patterns={topic.antiPatterns!} accentColor={accentColor} />
           )}
 
           {/* Quiz */}

@@ -22,6 +22,13 @@ export interface Exercise {
   solutionLanguage: string;
 }
 
+export interface AntiPattern {
+  title: string;
+  problem: string;
+  danger: string;
+  fix: string;
+}
+
 export interface CodeExample {
   title: string;
   language: string;
@@ -42,6 +49,7 @@ export interface Topic {
   exercises?: Exercise[];
   outcomes?: string[];
   whenToUse?: string[];
+  antiPatterns?: AntiPattern[];
 }
 
 export interface Level {
@@ -1704,6 +1712,26 @@ public class AuthInfoController {
 }`,
             solutionLanguage: "java"
           }
+        ],
+        antiPatterns: [
+          {
+            title: "Storing mutable business state in the Authentication object",
+            problem: "Attaching domain objects (e.g., User entity with lazy-loaded collections) directly as the Authentication principal and mutating them during the request lifecycle.",
+            danger: "The SecurityContext is shared across the request thread. Mutations to the principal affect all security decisions in the same request. In reactive or async contexts, the same principal object may be read concurrently.",
+            fix: "Store only an immutable snapshot in the principal: username, userId, and pre-loaded GrantedAuthority list. Reload the full domain entity from the repository when business logic needs it."
+          },
+          {
+            title: "Reading SecurityContextHolder directly in domain/business logic",
+            problem: "Service or repository classes call SecurityContextHolder.getContext().getAuthentication() directly to retrieve the current user, creating an invisible dependency on the security infrastructure.",
+            danger: "Business logic becomes untestable without a full Spring Security context. Unit tests must configure SecurityContextHolder manually. Domain logic is coupled to the web/security layer.",
+            fix: "Inject the Authentication as a method parameter or constructor argument. Controllers extract it from the security context; services receive it as an explicit parameter. This makes the dependency visible and testable."
+          },
+          {
+            title: "Not clearing the SecurityContext after async operations",
+            problem: "Manually setting a SecurityContext on a worker thread (e.g., via SecurityContextHolder.setContext()) without clearing it after the task completes.",
+            danger: "Thread pool threads reuse the thread — the stale SecurityContext from a previous user's request persists to the next task executed by the same thread, causing authorization decisions to use the wrong identity.",
+            fix: "Use DelegatingSecurityContextRunnable or DelegatingSecurityContextExecutorService which automatically clear the context after task completion. Never set SecurityContextHolder directly on pooled threads."
+          }
         ]
       },
       {
@@ -1923,6 +1951,26 @@ public SecurityFilterChain filterChain(HttpSecurity http,
           "❌ AVOID when hasRole(), hasAuthority(), or a simple @beanName.method() SpEL expression covers the requirement — a custom AuthorizationManager is unnecessary complexity for standard cases.",
           "❌ AVOID for domain-object (per-instance) security — use PermissionEvaluator with hasPermission() in @PreAuthorize instead, which integrates with Spring Security's method security pipeline.",
           "⚖ TRADE-OFF: More boilerplate than SpEL (a full Java class vs one annotation), but offers full testability, dependency injection, logging, and the ability to call external systems synchronously during the authorization decision."
+        ],
+        antiPatterns: [
+          {
+            title: "Returning null instead of AuthorizationDecision(false)",
+            problem: "An AuthorizationManager.check() method returns null when it wants to deny access, assuming null means 'denied'.",
+            danger: "In Spring Security, null means 'abstain' — the manager has no opinion. When composed with AuthorizationManagers.anyOf(), a null-returning manager allows another manager to grant access. Access may be silently granted.",
+            fix: "Return new AuthorizationDecision(false) to explicitly deny. Return null only when the manager intentionally abstains (e.g., it does not handle this type of request and another manager should decide)."
+          },
+          {
+            title: "Blocking I/O or slow calls inside check()",
+            problem: "The check() method makes synchronous HTTP calls to an external authorization service (OPA, Casbin) without a timeout, or performs JPA queries without caching.",
+            danger: "Every incoming request blocks a server thread for the duration of the external call. Under load, this exhausts the thread pool and makes the application unresponsive — a security check becomes a DoS vector.",
+            fix: "Apply a strict timeout (via RestClient/HttpClient timeout config). Cache authorization decisions for short periods (seconds) using Caffeine or Redis. For truly reactive needs, use the reactive variant of AuthorizationManager."
+          },
+          {
+            title: "Stateful AuthorizationManager beans",
+            problem: "An AuthorizationManager bean stores request-scoped data in instance fields (e.g., keeping the last authenticated user or decision in a field for 'optimization').",
+            danger: "Spring beans are singletons by default. Instance fields are shared across all concurrent requests, causing race conditions where one user's authorization state bleeds into another user's decision.",
+            fix: "AuthorizationManager implementations must be stateless. Derive all data from the Supplier<Authentication> and the authorization object passed to check(). Never store request-scoped data in bean fields."
+          }
         ]
       },
       {
@@ -2138,6 +2186,26 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 // "Security filter chain: [SecurityContextHolderFilter, ...]"
 // Seu filtro deve aparecer nesta lista, não fora dela.`,
             solutionLanguage: "java"
+          }
+        ],
+        antiPatterns: [
+          {
+            title: "Using authenticated() instead of denyAll() as fallback",
+            problem: "Ending the authorization rules with .anyRequest().authenticated() as the default fallback.",
+            danger: "Any new endpoint added to the application is automatically accessible to all authenticated users — including internal admin endpoints, debug endpoints, or Swagger UI — until an explicit rule is added. Security is opt-out instead of opt-in.",
+            fix: "End rules with .anyRequest().denyAll(). New endpoints are blocked by default. This forces developers to explicitly declare access rules for every new endpoint, making security posture visible in code review."
+          },
+          {
+            title: "Registering custom filters as @Component (double registration)",
+            problem: "A custom security filter extends OncePerRequestFilter and is annotated with @Component. Spring Boot auto-registers @Component filters as servlet filters AND Spring Security registers them via http.addFilterBefore().",
+            danger: "The filter executes twice per request — once outside the security filter chain (before SecurityContextHolder is populated) and once inside. The first execution sees a null Authentication. Audit logs, rate limiters, or token validators fire twice.",
+            fix: "Either: (a) register the filter only via http.addFilterBefore/After() and suppress auto-registration with a FilterRegistrationBean with setEnabled(false), or (b) use @Component only and do NOT call http.addFilter*() — choose one registration path."
+          },
+          {
+            title: "Exposing actuator endpoints without explicit security rules",
+            problem: "Spring Boot Actuator endpoints (/actuator/**) are included in the default security configuration that ends with anyRequest().authenticated() — so any authenticated user can access /actuator/env, /actuator/beans, or /actuator/heapdump.",
+            danger: "/actuator/env exposes all configuration properties including database passwords and API keys. /actuator/heapdump can expose in-memory data including tokens and credentials. Authentication alone is not sufficient protection.",
+            fix: "Restrict actuator endpoints explicitly: .requestMatchers(\"/actuator/health\").permitAll() for health checks and .requestMatchers(\"/actuator/**\").hasRole(\"ACTUATOR_ADMIN\") for everything else. Consider a separate SecurityFilterChain for actuator endpoints on a different port."
           }
         ]
       },
@@ -2383,6 +2451,26 @@ public class DocumentService {
 }`,
             solutionLanguage: "java"
           }
+        ],
+        antiPatterns: [
+          {
+            title: "@PreAuthorize on non-public methods",
+            problem: "Annotating package-private, protected, or private methods with @PreAuthorize expecting them to be intercepted by Spring AOP.",
+            danger: "Spring AOP (proxy-based) only intercepts public method calls on proxied beans. @PreAuthorize on non-public methods is silently ignored — no exception is thrown, no warning is logged. The method executes for all callers regardless of role.",
+            fix: "All @PreAuthorize-annotated methods must be public. If the method must be non-public, use AspectJ compile-time weaving instead of Spring's proxy-based AOP (requires additional build configuration)."
+          },
+          {
+            title: "Triggering database lazy loading inside SpEL expressions",
+            problem: "Using @PostAuthorize with a SpEL expression like returnObject.department.manager.username that navigates a JPA entity graph with lazy associations.",
+            danger: "Each navigation step fires an additional SQL query outside the original transaction (which closed when the repository method returned). This causes LazyInitializationException or N+1 queries per security check, proportional to the number of requests.",
+            fix: "Fetch the required data eagerly in the repository query (JOIN FETCH) or load only the needed scalar values into the security check. Alternatively, check ownership at the query level and return only authorized results."
+          },
+          {
+            title: "@EnableMethodSecurity on multiple @Configuration classes",
+            problem: "@EnableMethodSecurity is declared on two or more configuration classes in the same application context.",
+            danger: "Spring Security registers its AOP advisors twice. Method interceptors may fire twice per call, causing double evaluation of SpEL expressions and potential double-firing of authorization event listeners. Side effects of the authorization check run twice.",
+            fix: "Declare @EnableMethodSecurity exactly once in the application — on the primary security configuration class. Verify with grep that only one class in the codebase carries this annotation."
+          }
         ]
       }
     ]
@@ -2621,6 +2709,26 @@ public class DocumentService {
 // individualmente (não por regra de negócio, mas por escolha do utilizador),
 // aí ACL faria sentido — cada documento teria sua própria lista de acessos.`,
             solutionLanguage: "java"
+          }
+        ],
+        antiPatterns: [
+          {
+            title: "Hardcoded role strings scattered across the codebase",
+            problem: "Role names like \"ROLE_ADMIN\", \"ROLE_EDITOR\" appear as string literals in dozens of @PreAuthorize annotations, requestMatchers calls, and if-statements across multiple service classes.",
+            danger: "When a role is renamed or split (e.g., ROLE_EDITOR → ROLE_CONTENT_EDITOR + ROLE_MEDIA_EDITOR), every occurrence must be found and updated. Grep misses annotations inside method bodies. One missed update creates a security hole or access regression.",
+            fix: "Centralize role constants in a dedicated class or enum: public final class Roles { public static final String ADMIN = \"ROLE_ADMIN\"; }. Reference constants everywhere: @PreAuthorize(\"hasRole('\" + Roles.ADMIN + \"')\") or create meta-annotations per role."
+          },
+          {
+            title: "Assigning ROLE_USER to all authenticated users implicitly",
+            problem: "Every registered user receives ROLE_USER, and all feature authorization checks verify only hasRole('USER') — effectively meaning 'any authenticated user'.",
+            danger: "The authorization model provides a false sense of security. There is no meaningful access differentiation between users. When a new feature requires restricted access, the existing ROLE_USER pattern must be refactored across the entire codebase.",
+            fix: "Design roles around actual access boundaries from day one: ROLE_FREE_TIER, ROLE_PRO, ROLE_STAFF. Even if initially all users have ROLE_PRO, the role name reflects intent. Adding restrictions later requires only new role assignments, not code changes."
+          },
+          {
+            title: "Using Spring Security ACL for performance-critical object-level access",
+            problem: "Implementing per-document, per-record, or per-asset authorization using spring-security-acl with a relational database backend for a dataset of millions of records with high read throughput.",
+            danger: "ACL lookups require joining ACL_OBJECT_IDENTITY, ACL_ENTRY, and ACL_SID tables. For 1M documents with complex sharing rules, each authorization check is a multi-table join. At high throughput, this becomes a bottleneck even with aggressive caching.",
+            fix: "Reserve ACL for datasets where end users manage sharing (< 100K objects, low throughput). For larger datasets, encode ownership as a direct foreign key on the domain entity and filter in the repository query. Policy-based filtering (ABAC via JPA specifications) scales better."
           }
         ]
       },
@@ -2861,6 +2969,26 @@ class UserServiceSecurityTest {
     // mesmo sem role — cuidado com testes que "passam" por razão errada.`,
             solutionLanguage: "java"
           }
+        ],
+        antiPatterns: [
+          {
+            title: "Security tests that pass because security is not enabled",
+            problem: "@Test methods verify that unauthorized access is rejected, but @EnableMethodSecurity is missing from the test configuration. The test passes because @PreAuthorize is silently ignored — not because security works.",
+            danger: "False confidence: the test suite is green but security is unenforced in the test context. If @EnableMethodSecurity is also missing in production (e.g., forgotten in a refactor), the test will still pass and the vulnerability is invisible.",
+            fix: "Always assert the positive test first: verify that an authorized user CAN access the endpoint. If this test also passes without @EnableMethodSecurity (which it should), add a test that verifies AccessDeniedException IS thrown for an unauthorized user and confirm it fails without @EnableMethodSecurity."
+          },
+          {
+            title: "Testing only the happy path (authorized access)",
+            problem: "Security test suites contain tests for 200 OK responses from authorized users but no tests for 401/403 responses from unauthorized or unauthenticated users.",
+            danger: "A misconfigured .permitAll() or a missing @PreAuthorize goes undetected. The happy path passes; the unauthorized path is never executed in CI. Security regressions are found in production or penetration tests.",
+            fix: "For every protected endpoint, write three tests: (1) authorized user → expected response, (2) authenticated user with wrong role → 403, (3) unauthenticated request → 401. Use @ParameterizedTest with @MethodSource to cover multiple unauthorized roles concisely."
+          },
+          {
+            title: "Mocking the SecurityContext manually in tests",
+            problem: "Tests manually call SecurityContextHolder.setContext(mockContext) and populate mock Authentication objects instead of using Spring Security Test annotations.",
+            danger: "Manual SecurityContext setup is verbose, fragile (context must be cleared after each test or it leaks to subsequent tests), and does not test the actual authentication conversion pipeline (e.g., JWT → Authentication mapping).",
+            fix: "Use @WithMockUser for simple role-based tests. Use @WithUserDetails for tests that need a real UserDetailsService. Use SecurityMockMvcRequestPostProcessors.jwt() for OAuth2/JWT endpoint tests. These annotations manage context setup and teardown correctly."
+          }
         ]
       },
       {
@@ -3095,6 +3223,26 @@ public JwtDecoder jwtDecoder() {
 // Resultado: JWT sem tenant_id ou com tenant desconhecido → 401 Unauthorized
 // com mensagem de erro estruturada no header WWW-Authenticate`,
             solutionLanguage: "java"
+          }
+        ],
+        antiPatterns: [
+          {
+            title: "Not validating the 'aud' (audience) claim",
+            problem: "The JWT decoder is configured without audience validation, accepting any JWT signed by the correct issuer regardless of which service it was issued for.",
+            danger: "A token issued for service-a (audience: api-a) is accepted by service-b (audience: api-b). If service-a is compromised and leaks valid tokens, an attacker can replay those tokens against service-b. Token scope is not enforced.",
+            fix: "Configure audience validation: NimbusJwtDecoder.withJwkSetUri(uri).build() and add JwtValidators.createDefaultWithIssuer() composed with an AudienceValidator that checks token.getAudience().contains(\"your-api-id\"). Reject tokens not explicitly issued for this service."
+          },
+          {
+            title: "Storing sensitive data in the JWT payload",
+            problem: "JWTs include PII fields such as email, full name, date of birth, credit card tokens, or internal system IDs that are useful for the frontend but sensitive.",
+            danger: "JWT payloads are base64-encoded, not encrypted — any party with the token can decode and read the payload. Tokens stored in browser localStorage are readable by JavaScript. Tokens in logs are exposed to anyone with log access.",
+            fix: "Store only non-sensitive identifiers in JWTs: sub (user ID), roles, and the minimum claims needed for authorization. Fetch sensitive profile data from a userinfo endpoint using the access token. If data must be in the token, use JWE (JSON Web Encryption) instead of JWS."
+          },
+          {
+            title: "Using long-lived JWTs without refresh token rotation",
+            problem: "Access tokens are issued with 24-hour or longer expiry to avoid user friction. No refresh token rotation is implemented.",
+            danger: "A stolen access token remains valid until expiry. There is no mechanism to invalidate a specific token. A compromised mobile device or XSS attack yields a token valid for the remainder of its lifetime — up to 24 hours of unauthorized access.",
+            fix: "Issue short-lived access tokens (15-30 minutes) and long-lived refresh tokens with rotation: each refresh invalidates the old refresh token and issues a new one. Detect refresh token reuse (a sign of theft) and invalidate the entire session family."
           }
         ]
       },
@@ -3455,6 +3603,26 @@ http.csrf(csrf -> csrf.disable()); // ❌ global — formulários HTML desproteg
 // Cadeia 1 (/api/**): CSRF desabilitado, JWT, stateless
 // Cadeia 2 (/web/**): CSRF habilitado, formulário, sessão`,
             solutionLanguage: "java"
+          }
+        ],
+        antiPatterns: [
+          {
+            title: "Logging the Authentication object or request parameters containing credentials",
+            problem: "Debug or error handlers log authentication.toString() or incoming request bodies that may contain passwords, tokens, or API keys.",
+            danger: "Credentials appear in application logs, which are often forwarded to centralized log aggregation systems (Splunk, ELK, CloudWatch) with broader access than the application itself. Log files may be stored unencrypted or retained indefinitely.",
+            fix: "Never log Authentication objects directly. Log only authentication.getName() (username). Implement a custom LoggingFilter that masks sensitive headers (Authorization) and parameters (password, token) before logging. Use CredentialsContainer.eraseCredentials() after authentication."
+          },
+          {
+            title: "Returning stack traces or internal details in 401/403 error responses",
+            problem: "The default Spring error handler returns a JSON body containing exception class names, stack traces, SQL query fragments, or internal service URLs in 403/401 responses.",
+            danger: "Error details reveal application architecture, dependency versions, database schema, and internal URL structure. This information is directly useful for targeted attacks (SQL injection, path traversal, version-specific exploits).",
+            fix: "Configure a custom AccessDeniedHandler and AuthenticationEntryPoint that return generic messages only: {\"error\": \"forbidden\"}. Suppress Spring's default /error endpoint details with server.error.include-stacktrace=never and server.error.include-message=never in production profiles."
+          },
+          {
+            title: "Disabling security in the development Spring profile and deploying that profile to staging",
+            problem: "A @Profile(\"dev\") configuration class disables all security (http.authorizeHttpRequests(a -> a.anyRequest().permitAll()). The dev profile is accidentally activated in staging via a misconfigured environment variable.",
+            danger: "The staging environment — which often contains production-like data for QA — is completely open. Since staging is typically accessible from the internet (for external QA teams), all data is exposed with no authentication whatsoever.",
+            fix: "Never conditionally disable security based on profiles. Use a real security configuration in all environments. For developer convenience, use predefined test users in application-dev.properties via spring.security.user.name/password, not by disabling security. Run automated security smoke tests in the CI pipeline against the staging environment."
           }
         ]
       }
